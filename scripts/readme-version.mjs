@@ -5,11 +5,16 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 // to update it afterwards, so a README that still names an older plugin version is
 // only fixable by cutting another release. Catch it before the tag is pushed.
 
-// The upstream READMEs are kept verbatim for attribution, so they keep their
-// version claims; all three published READMEs are still checked, because npm
-// freezes a package's README at publish time and an outdated one can only be
-// fixed by cutting another release.
+// Only this fork's README is checked: the upstream READMEs are kept verbatim for
+// attribution and legitimately name their own historical versions. npm freezes a
+// package's README at publish time, so ours must not name a stale version.
 const README_FILES = ['README.md']
+
+// This fork's README documents which upstream tag it is based on. That baseline is
+// historic by design and will differ from this package's own version, so it is
+// allowed to appear verbatim; every OTHER retired version must stay inside a
+// release-notes link.
+const UPSTREAM_BASELINE_VERSIONS = ['0.1.22']
 
 // A README may name only the version being released. Older plugin versions stay
 // reachable through their own release-notes links, which every check strips first.
@@ -33,6 +38,7 @@ export function findStaleVersionReferences(markdown, version, known) {
   const stale = []
   for (const candidate of known) {
     if (candidate === version) continue
+    if (UPSTREAM_BASELINE_VERSIONS.includes(candidate)) continue
     // Match whole versions only: `0.1.5` must not be found inside `0.1.5-rc.1`.
     const pattern = new RegExp(`(?<![0-9A-Za-z.-])${escapeForRegExp(candidate)}(?![0-9A-Za-z.-])`, 'g')
     for (const match of body.matchAll(pattern)) {

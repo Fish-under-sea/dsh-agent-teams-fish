@@ -504,8 +504,13 @@
   cursor: zoom-in;
 }
 
+/* Scoped to the panel box, never the viewport: `.panel` is `position: absolute`
+   (the drag layout translates it) and clips to `overflow: hidden`, so an
+   absolutely positioned zoom layer can only cover this panel. A fixed layer
+   would instead escape the shell overlay's stacking context whenever the
+   panel's incidental containing-block properties changed. */
 .artPreview {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: 60;
   display: flex;

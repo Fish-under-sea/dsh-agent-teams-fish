@@ -71,7 +71,21 @@ import {
   resizePanelLayout,
   resolvePanelGeometry,
 } from '../lib/client/panel-geometry.js'
-import { memberArtUrl } from '../lib/client/artwork.js'
+import {
+  ART_BASE,
+  LEAD_ART,
+  LEAD_FULL_ART,
+  memberArtUrl,
+  memberRoleSlug,
+  vendorSlug,
+} from '../lib/client/artwork.js'
+import {
+  ARTWORK_ROLES,
+  ARTWORK_VENDORS,
+  PACKAGED_ARTWORK_SLUGS,
+  artworkCandidates,
+  isAllowedArtwork,
+} from '../lib/artwork-source.js'
 import { parseAgentTeamsCreateArgs } from '../lib/client/agent-teams-card-definition.js'
 import {
   AGENT_TEAMS_LOCALE_NAMESPACE,
@@ -197,7 +211,6 @@ const stagingPlanSource = await readFile(new URL('../src/client/StagingPlanEdito
 const clientIndexSource = await readFile(new URL('../src/client/index.tsx', import.meta.url), 'utf8')
 const agentTeamsCardCss = await readFile(new URL('../src/client/AgentTeamsCard.module.css', import.meta.url), 'utf8')
 const agentTeamsCardSource = await readFile(new URL('../src/client/AgentTeamsCard.tsx', import.meta.url), 'utf8')
-const artworkSource = await readFile(new URL('../src/client/artwork.ts', import.meta.url), 'utf8')
 const hostSource = await readFile(new URL('../src/index.ts', import.meta.url), 'utf8')
 const toolsSource = await readFile(new URL('../src/tools.ts', import.meta.url), 'utf8')
 const localesSource = await readFile(new URL('../src/client/locales.ts', import.meta.url), 'utf8')
@@ -327,14 +340,13 @@ check(
     || image.bitDepth !== 8
     || image.colorType !== 6))}`,
 )
-check(
-  'client mapping and host allowlist reference every V2 artwork asset',
-  expectedArtwork.every(name => artworkSource.includes(name) || hostSource.includes(name))
-    && artworkSource.includes('member-data-v2.png')
-    && artworkSource.includes('member-operator-v2.png'),
-  'a packaged image is unreachable or one of the eighth-member mappings is missing',
-)
-const eightRoleArtwork = [
+// The fork replaced upstream's fixed role-only slug list with two halves: the
+// host allowlist (`PACKAGED_ARTWORK_SLUGS` plus the vendor namespace) and the
+// client's `vendor+role` template mapping. Both are resolved through the real
+// modules rather than by scanning for literal file names, because the client
+// now builds `member-<vendor>-<role>-v2.png` from a template and never spells
+// an individual packaged slug out.
+const canonicalRoster = [
   ['Researcher', 'Researcher'],
   ['Engineer', 'Backend Engineer'],
   ['QA', 'QA Engineer'],
@@ -343,7 +355,31 @@ const eightRoleArtwork = [
   ['Docs', 'Docs Writer'],
   ['Data', 'Data Analyst'],
   ['Operator', 'Release Operator'],
-].map(([name, role]) => memberArtUrl(name, role))
+]
+const artworkReachesPackage = url => {
+  const slug = typeof url === 'string' && url.startsWith(ART_BASE) ? url.slice(ART_BASE.length) : ''
+  return slug !== '' && artworkCandidates(slug).some(candidate => packagedArtwork.includes(candidate))
+}
+check(
+  'client mapping and host allowlist reference every V2 artwork asset',
+  JSON.stringify([...PACKAGED_ARTWORK_SLUGS].sort()) === JSON.stringify(expectedArtwork)
+    && expectedArtwork.every(name => artworkCandidates(name)[0] === name
+      && artworkReachesPackage(`${ART_BASE}${name}`))
+    && ARTWORK_ROLES.length === 8
+    && ARTWORK_ROLES.every(role =>
+      canonicalRoster.some(([name, memberRole]) => memberRoleSlug(name, memberRole) === role))
+    && canonicalRoster.every(([name, role]) => memberRoleSlug(name, role) !== null
+      && artworkReachesPackage(memberArtUrl(name, role))
+      && artworkReachesPackage(memberArtUrl(name, role, 'deepseek')))
+    && ARTWORK_VENDORS.length === 9
+    && ARTWORK_VENDORS.every(vendor => vendorSlug({ model: vendor }) === vendor
+      && isAllowedArtwork(`brand-${vendor}.svg`)
+      && canonicalRoster.every(([name, role]) => artworkReachesPackage(memberArtUrl(name, role, vendor))))
+    && artworkReachesPackage(LEAD_ART)
+    && artworkReachesPackage(LEAD_FULL_ART),
+  'a packaged image is unreachable or one of the eighth-member mappings is missing',
+)
+const eightRoleArtwork = canonicalRoster.map(([name, role]) => memberArtUrl(name, role))
 check(
   'canonical eight-member roster resolves to eight distinct role images',
   eightRoleArtwork.every(Boolean) && new Set(eightRoleArtwork).size === 8,
@@ -372,11 +408,20 @@ check(
     && /\.memberState\[data-activity='working'\][^{]*\{[^}]*color:\s*var\(--dsw-alias-state-business-primary\)/su.test(activityPanelCss),
   'the working label and glyph must follow the host business color',
 )
+// The host renders dialogs in its own fixed layer at z-index 1000, so the slot
+// only has to stay below it. Bound every declared z-index rather than one magic
+// number, and reject the actual escalation mechanisms: a body portal
+// (createRoot/createPortal) or a layer that outranks the host's dialog layer.
+const panelZIndexes = [...activityPanelCss.matchAll(/z-index:\s*(\d+)/gu)].map(match => Number(match[1]))
 check(
   'activity panel uses the shell overlay instead of a page-breaking body portal',
   clientIndexSource.includes("ctx.slots.inject('shell.overlay'")
     && !clientIndexSource.includes('createRoot')
+    && !clientIndexSource.includes('createPortal')
+    && !activityPanelSource.includes('createPortal')
     && activityPanelCss.includes('position: absolute')
+    && panelZIndexes.length > 0
+    && panelZIndexes.every(value => value < 1000)
     && !activityPanelCss.includes('2147483000')
     && !activityPanelCss.includes('position: fixed'),
   'a body portal or unbounded z-index can cover host modal controls',

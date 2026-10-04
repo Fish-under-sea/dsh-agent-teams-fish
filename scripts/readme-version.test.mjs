@@ -42,6 +42,11 @@ test('a shorter version does not match inside a longer prerelease', () => {
   assert.deepEqual(findStaleVersionReferences(markdown, '0.1.20', ['0.1.5', '0.1.2', ...KNOWN]), [])
 })
 
+test('the documented upstream baseline version may be named in prose', () => {
+  const markdown = 'Based on upstream `v0.1.22` (commit `9cba4fe`).'
+  assert.deepEqual(findStaleVersionReferences(markdown, '0.1.23', ['0.1.22', ...KNOWN]), [])
+})
+
 test('install commands are extracted regardless of version', () => {
   const markdown = 'add --save-exact dsh-agent-teams-fish@0.1.16 and dsh-agent-teams-fish@0.1.20'
   assert.deepEqual(findPinnedInstallVersions(markdown), ['0.1.16', '0.1.20'])

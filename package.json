@@ -1,7 +1,7 @@
 {
   "name": "dsh-agent-teams-fish",
-  "version": "0.1.22",
-  "description": "AgentTeams for DeepSeek Harness: multi-agent team collaboration (captain, members, tasks with dependencies, messaging) driven by natural language, with a tree monitor in the web GUI. Community fork of @nanmicoder/dsh-agent-teams adding a custom artwork directory, per-vendor avatars and vendor brand badges",
+  "version": "0.1.23",
+  "description": "AgentTeams 多智能体团队协作（DeepSeek Harness 插件）：自然语言组队、成员与任务依赖 DAG、信箱通信、右侧栏树状监测 —— 上游 NanmiCoder/dsh-agent-teams 的补充版，新增自定义美术目录、九厂商 × 九岗位头像与厂商商标徽标。",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
