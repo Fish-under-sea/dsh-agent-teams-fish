@@ -52,6 +52,15 @@ export interface Config {
      * Disable to keep the natural-language trigger as the only entry point.
      */
     slashCommand?: boolean;
+    /**
+     * Directory of custom mascot artwork that replaces the packaged whale
+     * images slug by slug (`team-lead-v2.png`, `member-<role>-v2.png`,
+     * `action-<state>-v2.png`). The `-v2` suffix is optional, and `.png`,
+     * `.webp`, `.jpg`, `.jpeg`, `.gif` and `.svg` are accepted. Relative paths
+     * resolve against the host process working directory; a slug without a
+     * matching file keeps the packaged artwork.
+     */
+    artworkDir?: string;
 }
 export declare const Config: z<Config>;
 /** The model-facing usage policy: when and how to drive AgentTeams. */

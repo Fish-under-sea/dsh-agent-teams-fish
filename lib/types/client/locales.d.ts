@@ -207,6 +207,8 @@ export declare const zh: {
     'members.expand': string;
     'members.expandFinished': string;
     'members.empty': string;
+    'member.art.zoom': string;
+    'member.art.close': string;
     'assignment.label': string;
     'assignment.staged': string;
     'assignment.discarded': string;
@@ -422,6 +424,8 @@ export declare const en: {
     'members.expand': string;
     'members.expandFinished': string;
     'members.empty': string;
+    'member.art.zoom': string;
+    'member.art.close': string;
     'assignment.label': string;
     'assignment.staged': string;
     'assignment.discarded': string;

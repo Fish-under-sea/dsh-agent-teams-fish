@@ -19,7 +19,7 @@ import {
   subscribeActivitySnapshots,
 } from './activity-monitor.ts'
 import type { AgentTeamsCardData } from './agent-teams-card-definition.ts'
-import { LEAD_ART, memberArtUrl } from './artwork.ts'
+import { LEAD_ART, memberArtUrl, vendorSlug } from './artwork.ts'
 import css from './AgentTeamsCard.module.css'
 
 /** Window event name the floater listens for to open itself. */
@@ -82,7 +82,13 @@ export function AgentTeamsSummary({ data, openMember, sessionId, t }: AgentTeams
     ...data,
     captainSessionId: snapshot?.captainSessionId ?? owner,
     teamName: snapshot?.name ?? data.teamName,
-    members: snapshot?.members.map((member) => ({ id: member.id, name: member.name, role: member.role })) ?? data.members,
+    members: snapshot?.members.map((member) => ({
+      id: member.id,
+      name: member.name,
+      role: member.role,
+      provider: member.provider,
+      model: member.model,
+    })) ?? data.members,
   }), [data, owner, snapshot])
   return (
     <section className={css.root} data-agent-teams-card data-team-id={resolved.teamId}>
@@ -112,8 +118,8 @@ export function AgentTeamsSummary({ data, openMember, sessionId, t }: AgentTeams
               }}
               title={member.role === '' ? member.name : `${member.name} · ${member.role}`}
             >
-              {memberArtUrl(member.name, member.role) !== null ? (
-                <img className={css.memberArt} src={memberArtUrl(member.name, member.role) ?? ''} alt="" aria-hidden />
+              {memberArtUrl(member.name, member.role, vendorSlug(member)) !== null ? (
+                <img className={css.memberArt} src={memberArtUrl(member.name, member.role, vendorSlug(member)) ?? ''} alt="" aria-hidden />
               ) : (
                 <span className={css.memberInitial}>{member.name.trim().slice(0, 1).toUpperCase() || '?'}</span>
               )}

@@ -35,13 +35,14 @@ import {
 } from './tools.ts'
 import { installAgentTeamsGestureBoundary, registerAgentTeamsCommand } from './command.ts'
 import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { collectArchivedTeamsActivity, collectTeamsActivity } from './snapshot.ts'
 import { findTeamByCaptain } from './state.ts'
 import { formatProfilesForPrompt, type TeamProfileConfig } from './profiles.ts'
 import { installTeamCapabilities } from './capabilities.ts'
 import { TEAM_TOOL_NAMES } from './tool-names.ts'
+import { artworkCandidates, findCustomArtwork } from './artwork-source.ts'
 
 import { authenticatedWebRoutes, readJsonRequest, RequestBodyError, type BrowserRequestGate, type WebRouteHost } from './web-routes.ts'
 
@@ -82,6 +83,15 @@ export interface Config {
    * Disable to keep the natural-language trigger as the only entry point.
    */
   slashCommand?: boolean
+  /**
+   * Directory of custom mascot artwork that replaces the packaged whale
+   * images slug by slug (`team-lead-v2.png`, `member-<role>-v2.png`,
+   * `action-<state>-v2.png`). The `-v2` suffix is optional, and `.png`,
+   * `.webp`, `.jpg`, `.jpeg`, `.gif` and `.svg` are accepted. Relative paths
+   * resolve against the host process working directory; a slug without a
+   * matching file keeps the packaged artwork.
+   */
+  artworkDir?: string
 }
 
 // `z.object()` has an implicit `{}` default in Schemastery.  Fallback routes
@@ -132,6 +142,7 @@ export const Config: z<Config> = z.object({
   maxMembers: z.natural().min(1).default(8),
   promptSectionOrder: z.natural().default(117),
   slashCommand: z.boolean().default(true),
+  artworkDir: z.string(),
 })
 
 /** The model-facing usage policy: when and how to drive AgentTeams. */
@@ -161,6 +172,11 @@ export function apply(ctx: Context, config: Config): void {
     maxMembers: config.maxMembers ?? 8,
     profiles: config.profiles ?? {},
   }
+
+  // Custom mascot artwork is optional: every slug the directory does not
+  // provide keeps the packaged whale image.
+  const customArtDir = config.artworkDir === undefined ? undefined : resolve(config.artworkDir)
+  if (customArtDir !== undefined) ctx.logger.info(`agent-teams: custom artwork directory ${customArtDir}`)
 
   // Provider registration is a sibling plugin's effect (`subagent-spawn` /
   // `subagent-fork` rows), which can land after this mount under the Loader's
@@ -426,20 +442,13 @@ export function apply(ctx: Context, config: Config): void {
       },
     }), 'agent-teams: plan route')
 
-  // Whale mascot artwork: serve the packaged V2 role/action images to the
-  // activity panel. An explicit allowlist guards the route (no path
-  // traversal); the images ship with the bundle (files: assets/).
+  // Mascot artwork: serve the role/action images to the activity panel. The
+  // bundled whale images ship with the bundle (files: assets/); an optional
+  // `artworkDir` replaces them slug by slug, and the vendor namespace
+  // (`member-<vendor>-<role>`, `team-lead-<vendor>`) lets one role look
+  // different per model vendor. Only slugs this module knows reach the
+  // filesystem, so no other name can be read.
   const artDir = fileURLToPath(new URL('../assets/agent-teams/', import.meta.url))
-  const ART_ALLOWLIST = new Set([
-    'team-lead-v2.png',
-    'member-researcher-v2.png', 'member-engineer-v2.png',
-    'member-qa-v2.png', 'member-designer-v2.png',
-    'member-security-v2.png', 'member-docs-v2.png',
-    'member-data-v2.png', 'member-operator-v2.png',
-    'action-working-v2.png', 'action-thinking-v2.png',
-    'action-reporting-v2.png', 'action-celebrating-v2.png',
-    'action-sleeping-v2.png', 'action-sending-v2.png',
-  ])
     ctx.effect(() => webServer.register({
       kind: 'prefix',
       path: '/plugins/dsh-agent-teams/assets',
@@ -453,16 +462,51 @@ export function apply(ctx: Context, config: Config): void {
         res.end()
         return
       }
-      if (!ART_ALLOWLIST.has(name)) {
+      // Most specific slug first: vendor+role, then role, then vendor, then the
+      // packaged whale. A missing combination degrades instead of breaking.
+      const candidates = artworkCandidates(name)
+      if (candidates.length === 0) {
         res.writeHead(404)
         res.end()
         return
       }
       try {
-        const data = await readFile(join(artDir, name))
+        let customData: Buffer | undefined
+        let customType: string | undefined
+        if (customArtDir !== undefined) {
+          for (const candidate of candidates) {
+            const hit = await findCustomArtwork(customArtDir, candidate)
+            if (hit !== undefined) {
+              customData = hit.data
+              customType = hit.contentType
+              break
+            }
+          }
+        }
+        let data = customData
+        let contentType = customType
+        if (data === undefined) {
+          for (const candidate of candidates) {
+            try {
+              data = await readFile(join(artDir, candidate))
+              contentType = 'image/png'
+              break
+            } catch {
+              // Not shipped in the bundle: fall through to the next candidate.
+            }
+          }
+        }
+        if (data === undefined) throw new Error(`no artwork shipped for ${name}`)
         res.writeHead(200, {
-          'content-type': 'image/png',
-          'cache-control': 'public, max-age=86400',
+          'content-type': contentType ?? 'image/png',
+          // A custom artwork directory can change any slug at any time — even
+          // slugs that also ship packaged, such as the captain avatar — so
+          // nothing may sit in the browser cache while one is configured.
+          // Otherwise the packaged bytes cached before a file was dropped in
+          // would keep winning for 24h, which looks exactly like a broken
+          // override.
+          'cache-control':
+            customData === undefined && customArtDir === undefined ? 'public, max-age=86400' : 'no-store',
         })
         res.end(data)
       } catch (error: unknown) {
