@@ -1,237 +1,227 @@
-<p align="right">
-  <strong>English</strong> · <a href="./README_ZH.md">简体中文</a>
-</p>
+> **🧩 上游插件的补充版** · 基于上游 `v0.1.22`（commit `9cba4fe`）
+>
+> 本仓库**不是原创插件**，而是对 [NanmiCoder/dsh-agent-teams](https://github.com/NanmiCoder/dsh-agent-teams) 的**个人补充版**：
+> 原插件全部功能与著作权归原作者，本版只在其基础上补了「自定义美术目录 / 厂商头像 / 厂商商标徽标 / 点击放大」等能力。
+> 上游原始 README 与 LICENSE 原样保留（[`README.original.md`](README.original.md) · [`NOTICE.md`](NOTICE.md)）。
+
+<div align="center">
+
+# dsh-agent-teams-src
+
+**AgentTeams 插件的补充版 —— 让团队头像跟着「哪家模型」走**
+
+![upstream](https://img.shields.io/badge/upstream-NanmiCoder%2Fdsh--agent--teams-0078D6?style=flat-square)
+![base](https://img.shields.io/badge/base-v0.1.22-8b5cf6?style=flat-square)
+![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
+![DSH](https://img.shields.io/badge/DSH-%E2%89%A5%200.2.0--rc.2-22d3ee?style=flat-square)
+![node](https://img.shields.io/badge/node-%3E%3D20-339933?style=flat-square)
+
+九个厂商 × 九个岗位的头像、九个厂商商标徽标，全部由**一个自定义目录**接管 —— 不改一行动画代码也能随时换图。
+
+</div>
+
+---
+
+## 🙏 原作者与授权（请先读）
+
+| 项目 | 内容 |
+|------|------|
+| 插件名 | **dsh-agent-teams**（把一次 DeepSeek Harness 会话变成可协作的多智能体团队） |
+| 原作者 | **程序员阿江（Relakkes）** · GitHub [@NanmiCoder](https://github.com/NanmiCoder) · relakkes@gmail.com |
+| 原仓库 | <https://github.com/NanmiCoder/dsh-agent-teams> |
+| npm 包名 | `@nanmicoder/dsh-agent-teams` |
+| 许可证 | **MIT**，版权归原作者（本仓库 [`LICENSE`](LICENSE) **未做任何修改**） |
+| 本版基线 | 上游 tag `v0.1.22`（commit `9cba4fe`） |
+| 本版性质 | **补充版（fork）**，非原创、非官方；上游原始 README 完整保留为 [`README.original.md`](README.original.md) / [`README_ZH.original.md`](README_ZH.original.md) |
+
+> 署名与新增范围的完整说明见 **[`NOTICE.md`](NOTICE.md)**。再分发时请保留原作者署名。
 
 <p align="center">
-  <img src="./assets/readme/hero.svg" width="100%" alt="dsh-agent-teams turns one DeepSeek Harness session into a coordinated multi-agent team">
+  <img src="./assets/readme/hero.svg" width="100%" alt="上游插件的宣传图（来自上游仓库）">
 </p>
 
-<p align="center">
-  <a href="https://dshfind.com/en/plugins/NanmiCoder/dsh-agent-teams?ref=badge"><img src="https://img.shields.io/badge/recommended%20by-dshfind-FFD700?style=flat-square" alt="Recommended by dshfind"></a>
-  <a href="https://dshfind.com/en/plugins/NanmiCoder/dsh-agent-teams?ref=badge"><img src="https://dshfind.com/api/badge/NanmiCoder/dsh-agent-teams?lang=en" alt="dshfind score"></a>
-  <a href="https://dshfind.com/en/plugins/NanmiCoder/dsh-agent-teams?ref=badge"><img src="https://dshfind.com/api/badge/NanmiCoder/dsh-agent-teams?metric=downloads&amp;lang=en" alt="dshfind downloads"></a>
-</p>
+## 📖 上游插件做什么
 
-<p align="center">
-  <a href="https://www.npmjs.com/package/@nanmicoder/dsh-agent-teams"><img src="https://img.shields.io/npm/v/@nanmicoder/dsh-agent-teams?style=flat-square&amp;color=5B4CF0" alt="npm version"></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-0B7285?style=flat-square" alt="MIT license"></a>
-  <a href="./cordis.patch.yml"><img src="https://img.shields.io/badge/DSH-Web%20%2B%20Headless-5B4CF0?style=flat-square" alt="DSH Web and Headless"></a>
-</p>
+上游把 DSH 的单会话扩展成一支**有编制的团队**：建花名册、排任务 DAG（`dependencies` 表达前置关系）、按依赖调度、质量门（requirements → implementation → verification → review → repair → integration）、成员信箱与右侧「团队协作」面板。
 
-## One prompt. A working team.
+本版**没有动这套协作逻辑**，只补「这支队看起来长什么样」。
 
-`dsh-agent-teams` turns the current DeepSeek Harness session into a captain that can assemble durable sub-agents, split a goal into dependency-aware tasks, and coordinate work through direct messages.
+## ✨ 本版新增了什么
 
-Ask in natural language. The plugin provides the team protocol, 14 coordination tools, persistent state, an automatic shared-task scheduler, and a live Web UI—without requiring a separate workflow engine.
+| 能力 | 说明 | 主要文件 |
+|------|------|---------|
+| **自定义美术目录** | 新增 `artworkDir` 配置。配置后自定义图片优先于插件自带素材；且**只放行已知文件名**（未知文件名、`..`、绝对路径一律 404） | `src/artwork-source.ts`〔新增〕· `src/index.ts` |
+| **厂商头像命名空间** | 头像名从「岗位」扩展为「厂商 + 岗位」：`member-<vendor>-<role>-v2.png`；识别不出厂商时自动回落到岗位通用图 | 同上 · `src/client/artwork.ts` |
+| **厂商识别** | 从成员的 `provider + model` 路由推断厂商 —— `bailian` 一家同时供 qwen 与 deepseek，所以**以 model 为准** | `src/client/artwork.ts` |
+| **厂商商标徽标** | 头像右下角 22px 徽标从「活动状态图」换成「厂商商标 SVG」（`brand-<vendor>.svg`）；文件缺失时 `onError` 自动换回活动图，**不会破图** | 同上 · `ActivityPanel.tsx` · `ActivityPanel.module.css` |
+| **点击放大** | 点头像出 320px 大图预览（`-full` 文件缺失时自动降级到头像图），Esc 或点背景关闭 | `ActivityPanel.tsx` |
+| **队长头像** | 队长不跟随模型路由，改为 `team-lead-<vendor>.png` 优先、`team-lead-v2.png` 兜底的文件覆盖；并**改请求全新 URL** 规避浏览器 24h 缓存 | `src/client/artwork.ts` |
+| **缓存策略收紧** | 只要配了 `artworkDir`，美术资源一律 `no-store`（原来打包图带 `max-age=86400`，会造成「换了图看着没换」） | `src/index.ts` |
+| **路由链单测** | 新增 16 条单测：降级链顺序、未知厂商拒绝、非 `.png` 请求拒绝、路径穿越拒绝 | `scripts/custom-artwork.test.mjs`〔新增〕 |
 
-<p align="center">
-  <img src="./assets/readme/workspace.png" width="100%" alt="AgentTeams native workspace with members, task dependencies, and progress">
-</p>
+## 🎨 美术系统
 
-## Releases
+### 命名契约
 
-[v0.1.22](./release-notes/v0.1.22.md) targets the published Harness `0.2.0-rc.2` packages and retains script-free Git installation. This plugin release uses npm `latest`; the recommended host is Harness `0.2.0-rc.2` (its `next` channel). See the exact [support matrix](./compatibility.json).
+| 文件名 | 用途 | 面板尺寸 |
+|--------|------|:--------:|
+| `member-<vendor>-<role>-v2.png` | 某厂商某岗位的成员头像 | 40px（卡片 24px） |
+| `member-<vendor>-<role>-full-v2.png` | 点击放大的大图 | 320px |
+| `member-<role>-v2.png` | 不区分厂商的岗位通用图 | 40px |
+| `team-lead-<vendor>-v2.png` · `team-lead-v2.png` | 队长头像（前者优先） | 44px |
+| `brand-<vendor>.svg` | 头像右下角的厂商商标 | 22px |
+| `action-*-v2.png` | 未识别厂商时徽标用的活动状态图 | 22px |
 
-## Why AgentTeams?
+- **厂商 token（9）**：`deepseek` `qwen` `glm` `kimi` `claude` `gemini` `grok` `gpt` `hunyuan`
+- **岗位 token（8）**：`engineer` `qa` `security` `researcher` `designer` `docs` `data` `operator`（队长单列）
+- 文件名可省略 `-v2`；扩展名优先级 `.png` `.webp` `.jpg` `.jpeg` `.gif` `.svg`
 
-| Capability | What it changes |
-| --- | --- |
-| **Captain-led delegation** | The current session creates the team, assigns roles, and consolidates the final result. |
-| **Durable members** | Members are continuable DSH sub-agents that can be woken for focused follow-up turns. |
-| **Dependency-aware tasks** | Tasks move through explicit states and cannot be claimed before their dependencies finish. |
-| **Automatic reuse and safe takeover** | Idle members claim the next ready task; reassignment revokes stale attempts before new work starts, and cold recovery retries stranded open attempts. |
-| **Direct messaging** | Members send durable mailbox messages directly to teammates or the captain—no relay required. |
-| **Live activity panel** | The Web UI combines segmented progress, a collapsible roster, and an interactive task DAG; running tasks show the member's model, and completed archives retain their full member and task history. |
-| **Plan before execution** | Normal `/agent-teams` runs stage an unspawned roster and DAG first. The Web panel uses the host model catalog for member routes. Returning to chat stops the planning turn, asks what should change, and revises the same draft; discarding archives the draft, aborts the turn, and explicitly prevents automatic recreation. Only **Approve & Run** enables scheduling; each member starts with its first ready task. |
-| **Quality gates** | Opt-in quality tasks support requirements → implementation → verification → review → integration contracts, automatic repair/re-review, and explicit resume. Scope control is a completion-time audit, not host write interception. See [docs/quality-gates.md](./docs/quality-gates.md). |
-
-The conversation card and activity panel use Harness's official locale service. They follow live language changes between English and Simplified Chinese—including status labels, dynamic summaries, controls, archive markers, and accessibility text—without a page reload or a separate plugin setting.
-
-## Install and choose versions
-
-**Recommended pair: DeepSeek Harness `0.2.0-rc.2` + AgentTeams `0.1.22`. The host remains an RC.**
-
-| Use case | DeepSeek Harness | AgentTeams plugin |
-| --- | --- | --- |
-| **Recommended** | **`0.2.0-rc.2`** | **`0.1.22`** |
-| Previous recommended RC | `0.1.7-rc.2` | `0.1.22` |
-| Legacy RC | `0.1.5-rc.1`, `0.1.5-rc.2`, `0.1.5-rc.3` | `0.1.22` |
-| Retaining an older RC | `0.1.2-rc.1` | `0.1.22` |
-| Developer Alpha testing | `0.1.2-alpha.5` | `0.1.22` |
-| Retaining an older Alpha | `0.1.2-alpha.2` | `0.1.22` |
-
-### Desktop app
-
-In the app sidebar, open **Plugins → Add plugin** and enter the npm package spec:
+### 降级链（不会出现破图）
 
 ```text
-@nanmicoder/dsh-agent-teams@0.1.22
+请求 member-qwen-qa-v2.png
+  ├─ 1. member-qwen-qa-v2.png     厂商 + 岗位
+  ├─ 2. member-qa-v2.png          岗位通用
+  ├─ 3. member-qwen-v2.png        厂商通用
+  └─ 4. 插件自带素材
 ```
 
-Install it, then choose **Enable now**. If the host asks for a restart, restart the desktop app. Use the package spec above for the published build; an npm or GitHub webpage URL is not the same install source. For Git installation, use a commit containing the verified build outputs described below.
+带 `-full` 的请求会额外列出同名的非 full 版本（没画立绘也能点开放大）。
+商标链：`brand-<vendor>.svg → brand-<vendor>.png → brand.svg → brand.png`，全都没有时前端自动换回活动状态图。
 
-The desktop app supplies its own Harness core and package manager. Upgrading the global CLI does not upgrade that core, and an ordinary standalone CLI cannot manage its desktop profile. The CLI carrier installed by the desktop app can manage that profile in `0.2.0-rc.2`. Check the embedded core against the compatibility list. Harness `0.2.0-rc.2` is now the exact published target; its RC status is unchanged. The earlier source-only `0.2.0` prediction is no longer a support declaration. See the [release migration evidence](./docs/harness-0.2.0-rc.2/README.md).
+### 厂商识别规则
 
-### CLI / Web: 1. Install DeepSeek Harness
+用 `provider + model` 拼起来做小写正则匹配：
 
-```sh
-npm install --global @deepseek-ai/dsh@0.2.0-rc.2
-dsh --version
-```
+| token | 命中 | token | 命中 |
+|-------|------|-------|------|
+| `deepseek` | deepseek | `gemini` | gemini / gemma / google |
+| `qwen` | qwen / tongyi / 通义 | `grok` | grok / xai / x.ai |
+| `glm` | chatglm / glm / zai / z.ai / 智谱 | `gpt` | gpt / chatgpt / openai / codex |
+| `kimi` | kimi / moonshot | `hunyuan` | hunyuan / 混元 / tencent |
+| `claude` | claude / anthropic | | |
 
-Skip this if you already run this version. Alpha is opt-in: select an exact Alpha version from the table and lock all host dependencies as described in the [maintenance guide](./docs/maintenance-workflow.md).
+### 制作流水线（本版美术怎么来的）
 
-### CLI / Web: 2. Install the AgentTeams plugin
+| 步骤 | 做法 |
+|------|------|
+| 角色图 | Q 版立绘 → 白底去背（flood fill 阈值 238 + 边缘收缩）→ 裁到实心包围盒 → 8% 内边距 → **256×256 RGBA** |
+| 商标 | simple-icons / Iconify `thesvg` → 单色 path + 各厂商品牌色 `fill` → **等视觉内缩归一化** |
+| 归一化为什么必要 | 多数商标的墨迹**顶到 viewBox 边缘**，塞进 22px 圆盘（3px 内边距）会被边缘挤住、大小看着不一；统一缩到墨迹框 **0.854** 后视觉大小一致 |
+| 工具 | `render-svgs.mjs`（SVG→PNG，肉眼审图）· `normalize-brands.mjs`（归一化，回读真实栅格验证） |
 
-Install or upgrade from npm (pinned to this `latest` release):
+## 🚀 安装与启用
 
-```sh
-dsh plugin --profile web add --save-exact @nanmicoder/dsh-agent-teams@0.1.22
-```
+### 方式一：覆盖构建产物（本机在用的方式）
 
-For a CLI-managed installation, replace `web` with your active CLI profile. **Stop and restart that profile's Harness process, then refresh the browser.** Installing the plugin does not upgrade Harness; the host and plugin have independent `latest` channels.
-
-For Git installation, use a Git package spec pinned to a commit containing the verified server, client, and type build outputs in `lib/`, rather than an npm webpage URL. The repository distributes these outputs so installation does not need a `prepare` hook or build-script approval. Source maintainers must run `pnpm build` and update the committed outputs whenever the source changes. Existing npm releases remain immutable.
-
-For a manually cloned checkout, run `pnpm install --frozen-lockfile` and `pnpm build` after pulling, then restart the corresponding Harness process. Updating Git alone does not update local build output. See the [maintenance guide](./docs/maintenance-workflow.md).
-
-> For older `0.1.0-*` / `0.1.1-*` or unlisted hosts, keep a working pair and follow the [older-version and diagnostic guide](./docs/maintenance-workflow.md).
-
-See the full [compatibility matrix](./compatibility.json), [source installation and Alpha testing guide](./docs/maintenance-workflow.md), and [verification coverage and platform limits](./docs/maintenance-2026-09-06/release/README.md).
-
-Then ask for a team directly:
-
-> Use AgentTeams to review the commits after v0.5.3 from performance, security, and product perspectives. Return one consolidated report.
-
-## View teams in the workspace
-
-Click **View team** in the current chat header or the team card below a reply to open the native **Team collaboration** tab. The entry belongs to its chat, rather than the general workspace start page.
-
-Team and task content starts immediately: wide panes use columns and narrow panes stack them. Select a task to locate its owner; member icons open their conversations. Closing the tab does not stop the team, and its chat can reopen it. Completed teams retain their archives. Older hosts keep the activity panel.
-
-## How it works
-
-1. For a request to use AgentTeams, the captain follows the core protocol already in its system instructions. It continues an existing team and uses `agent_teams_status` when current state needs checking. When no team exists, the goal becomes a staged plan for review.
-2. The captain adds role-specific members backed by continuable sub-agents.
-3. The goal becomes tasks with owners and explicit dependencies.
-4. The shared scheduler uses real `running / idle / ready` state to atomically claim one ready task per idle member and wake it. An interrupted resident attempt stays parked and can resume through a direct message without losing its capability; after a cold process restart, the scheduler retries stranded open work with a fresh attempt.
-5. Members update with the current `attempt_id`; reassignment or captain takeover revokes the old attempt and waits for the old worker to quiesce before a new attempt starts.
-6. The captain presents the combined result, then archives the complete team record.
-
-Team state is stored under `<workspace>/.agent-teams/`; the Web panel reads that disk truth and combines it with live sub-agent activity.
-
-Member creation is zero-interaction by default: a member on the captain's current LLM route snapshots that provider, model, and reasoning effort, while a member on a requested alternative route snapshots the target model's default effort; later continuations restore the resolved snapshot. Only an explicit heterogeneous-team request (for example, “backend on provider A/model X, frontend on provider B/model Y”) supplies a member-specific `provider` + `model`; there is no per-member model or reasoning prompt.
-
-Captain sessions keep the concise core protocol and the original 14 native team tools from their first request. All business tools are directly available; no loading tool or extra activation call is needed. Configured profiles retain their bounded directory in the fixed system prompt. Creating, approving, continuing or ending a team does not rewrite the system prompt or tool schemas. Core rules remain available after history compaction or discarded code-mode tool results. Members receive four team tools, fixed member instructions, and their ordinary coding/research tools. Web approval wakes the captain with a control message; later member reports wake it again. See the [fixed protocol and benchmark contract](./docs/progressive-loading.md).
-
-## Slash command
-
-No “use AgentTeams” phrasing required. The plugin registers the
-closed-namespace `/agent-teams` host command, so the Web GUI slash menu shows
-an `agent-teams` placeholder with an input hint: pick it (or type the
-command), describe the goal, and press Enter.
-
-```
-/agent-teams research the pricing pages of three competitors
-```
-
-The command pipeline claims the line, then preserves that exact input as an
-ordinary user follow-up so it remains visible in the main chat. The gesture
-boundary adds the deterministic activation directive at pre-step, so the
-first model request follows the staged planning protocol without a mandatory helper call. The invocation is also durably
-logged (`command/run` / `command/done`).
-
-Surfaces without command adjudication (for example the headless CLI) get the
-same deterministic activation through a gesture boundary: any genuine user
-message starting with `/agent-teams` activates the protocol for the rest of
-the text. Mid-sentence mentions stay ordinary prose.
-
-Historical panels require saved team state or archives. Sessions from early versions that deleted teams without retaining archives do not yet support reconstructing the full panel from logs.
-
-## Configuration
-
-Defaults work without extra setup. A trusted profile can override member behavior:
-
-```yaml
-- id: agent-teams
-  config:
-    stateDir: .agent-teams
-    memberProvider: spawn
-    memberModel: deepseek-v4
-    memberMaxDepth: 0
-    maxMembers: 8
-```
-
-`memberMaxDepth` defaults to `0`: team members cannot create nested subagents. Set `1` to explicitly permit one descendant level; the limit also covers runtime/code-tool calls. Default members report through team messages only, avoiding duplicate native parent reports. Idle roster members make no model requests. Task assignments start distinct turns; coordination joins the nearest model step. Acceptance and consumption are tracked separately. Removal/archive drains the selected branch and its pending input before reporting success.
-
-`memberProvider` is the sub-agent runtime backend (`spawn` / `fork`), not an LLM provider. Cross-LLM-provider routing uses the optional `provider` + `model` fields of `agent_teams_add_member`; `memberModel` is only a model default for all members. A member on the captain's current provider/model inherits the captain's reasoning effort, while a changed provider or model automatically uses the target model's default. To request a particular effort, pass the optional `reasoning_effort` field — one of the target model's supported effort ids, or `"default"` to force the model's own default.
-
-`slashCommand: false` disables the deterministic `/agent-teams` activation surfaces (slash command and gesture boundary), leaving the natural-language trigger as the only entry point.
-
-## Boundaries
-
-- One captain leads one active team at a time.
-- Idle members with no open task are automatically reused for ready work. An idle member that still owns an open attempt is parked until messaged or explicitly reassigned; messages that cannot be delivered live remain durable and are retried at a later status boundary.
-- State is file-backed and serialized within one DSH process; concurrent processes editing the same team are not coordinated.
-- The activity panel reports persisted state as-is. Models may occasionally finish work without performing the expected task-state update.
-
-See [docs/usage.md](./docs/usage.md) for the full tool reference, state model, Web UI behavior, configuration, and known limits.
-
-## Plugin development Skill
-
-Community upgrade, audit, benchmark, testing and release skills are vendored with a pinned source revision. See [skills/README.md](./skills/README.md) for local rules and [CONTRIBUTING.md](./CONTRIBUTING.md) for the contribution workflow.
-
-The repository also ships the open Agent Skills package [`dsh-plugin-development`](./skills/dsh-plugin-development/SKILL.md):
-
-```sh
-npx skills add NanmiCoder/dsh-agent-teams --skill dsh-plugin-development
-```
-
-## Documentation
-
-| Guide | Covers |
-| --- | --- |
-| [Usage](./docs/usage.md) | Architecture, UI behavior, tools, configuration, limits, and validation |
-| [Verification](./docs/verification-guide.md) | Offline, composition, real e2e, and GUI verification |
-| [Plugin development](./docs/developing-dsh-plugins.md) | Human-readable guide built from this plugin |
-| [README writing](./docs/readme-writing-guide.md) | Repository documentation conventions |
-
-## Development
-
-```sh
+```powershell
 pnpm install
+pnpm typecheck
 pnpm build
-pnpm verify
+
+# DSH 实际加载的是 profile 里的 lib/ 与 assets/，构建完覆盖过去
+Copy-Item .\lib\*    "<DSH_HOME>\profiles\<profile>\node_modules\@nanmicoder\dsh-agent-teams\lib\"    -Recurse -Force
+Copy-Item .\assets\* "<DSH_HOME>\profiles\<profile>\node_modules\@nanmicoder\dsh-agent-teams\assets\" -Recurse -Force
 ```
 
-## Named multi-role profiles
+> **宿主代码改动必须重启 DSH**；纯客户端包改动**刷新页面**即可换新。
 
-Configure one or more complete team profiles in `cordis.patch.yml`. A profile always supplies the roster (independent provider/model/role/reasoning effort). Set `taskPlanning: captain` when the Captain should derive the DAG from the user's goal; omit it or set `taskPlanning: seed` to keep a fixed template workflow:
+### 方式二：从 GitHub 安装
+
+```jsonc
+// profiles/<profile>/package.json
+"dependencies": {
+  "@nanmicoder/dsh-agent-teams": "github:Fish-under-sea/dsh-agent-teams-src"
+}
+```
+
+### 方式三：本地 link 源码（改完源码重装即生效）
+
+```jsonc
+"dependencies": {
+  "@nanmicoder/dsh-agent-teams": "link:<本仓库路径>"
+}
+```
+
+> 不要用 `file:` —— pnpm 会把目录依赖当无哈希缓存，改了源码重装也不更新。
+
+### 启用自定义美术目录
 
 ```yaml
-profiles:
-  demo-delivery:
-    description: Ship a small feature
-    protocol: Discuss requirements, review, test, then prepare release; do not deploy automatically.
-    members:
-      - name: analyst
-        model: gpt-5.6-sol
-        role: Analyze requirements
-      - name: implementer
-        model: gpt-5.6-terra
-        role: Implement the approved solution
-    tasks:
-      - id: requirements
-        subject: Requirements discussion
-        assignee: analyst
-      - id: implementation
-        subject: Implement solution
-        assignee: implementer
-        dependencies: [requirements]
+# profiles/<profile>/cordis.patch.yml
+- insert:
+    - id: agent-teams
+      name: '@nanmicoder/dsh-agent-teams'
+      config:
+        stateDir: .agent-teams
+        memberProvider: spawn
+        artworkDir: <你的美术目录绝对路径>
 ```
 
-Use an explicit profile flag: `/agent-teams --profile demo-delivery implement the feature`. The first ordinary token is never treated as an implicit profile. Normal command runs call `agent_teams_create({ profile, approval: "required" })`: the roster and seed/Captain-designed DAG remain staged, no child session is created, and no task is claimed. Edit the plan in the activity panel using the host model catalog, return to chat so the Captain asks what to revise and then atomically updates the same draft, discard it, or click **Approve & Run**. Return/discard actions cancel any planning turn still running; discard also parks model-facing context that forbids silently creating a replacement team. Approval resolves the final provider/model/reasoning choices, commits the roster, and creates each member session only when its first task is ready. A running team is stopped from its own panel header through a confirmation dialog rather than from the composer. Direct tool clients may pass `approval: "automatic"` for the legacy immediate path. Failed review/test tasks do not unlock downstream work; automatic repair/review tasks do not depend on the failed review.
+> 配置目录**只在启动时读一次**；之后换图不用重启（自定义图片走 `no-store`）。
 
-## License
+## 🔨 开发与测试
 
-[MIT](./LICENSE)
+```bash
+pnpm install
+
+pnpm typecheck                                          # tsc 双工程（宿主 + 客户端）
+pnpm build                                              # 构建 lib/ 与素材指纹
+pnpm exec node --test scripts/custom-artwork.test.mjs   # 16 条路由链单测
+```
+
+## 📁 目录结构
+
+```text
+dsh-agent-teams-src/
+├── src/
+│   ├── index.ts                         插件入口：artworkDir 配置、资产路由、no-store 策略
+│   ├── artwork-source.ts                【本版新增】slug 语法、降级链、自定义目录查找
+│   └── client/
+│       ├── artwork.ts                   厂商/岗位识别与美术 URL 构建
+│       ├── ActivityPanel.tsx            团队面板：成员头像、徽标、点击放大、队长头像
+│       ├── ActivityPanel.module.css
+│       ├── AgentTeamsCard.tsx           会话卡片头像
+│       └── locales.ts                   中英文案
+├── scripts/
+│   └── custom-artwork.test.mjs          【本版新增】16 条路由链单测
+├── lib/                                 构建产物（随仓库跟踪，DSH 实际加载的就是它）
+├── assets/                              插件自带素材（15 张鲸鱼图 + readme/hero.svg）
+├── README.md                            本文件（本版重写）
+├── README.original.md                   上游英文 README（原样保留）
+├── README_ZH.original.md                上游中文 README（原样保留）
+├── NOTICE.md                            来源与署名
+├── LICENSE                              上游 MIT 许可证（未修改）
+└── CONTRIBUTING.md                      上游贡献指南
+```
+
+## ⚠️ 已知限制与踩过的坑
+
+| 项 | 实际情况 |
+|----|---------|
+| **队长不跟随模型路由** | 面板快照（`TeamActivitySnapshot`）里只有成员的 `provider/model`，没有队长的；宿主能取到队长路由但没进快照。所以队长用文件覆盖，想自动跟随需给快照加字段 |
+| **打包同名 URL 会被浏览器缓存 24h** | 打包图带 `max-age=86400`：某 URL 先请求过一次打包图，之后再放自定义文件，浏览器 24h 内不会重新请求，看着就像「改了没生效」（队长真踩过）。现已双重规避：队长改请求**全新 URL** + 配了目录就一律 `no-store` |
+| **硬刷新例外仍在** | 替换「同时也随插件发布」的文件名（`team-lead-v2.png`、`member-<role>-v2.png`、`action-*.png`）第一次需 `Ctrl+Shift+R` 挤掉旧缓存 |
+| **美术不随仓库分发** | 81 张角色图与 9 个商标 SVG **不在本仓库**，需自备目录。角色图是各家角色的 AI 二次创作、商标是各厂商商标，**版权归各厂商**，仅供个人学习使用；商用或再分发请自行评估 |
+| **`lib/` 是构建产物** | 与上游一致随仓库跟踪（便于 GitHub 直装），所以一次构建的 diff 较大；**未改 `package.json`**（包名与版本保持上游，因为装机路径与 profile 配置依赖它） |
+| **未跑上游发布校验** | 上游 `verify:release` / `verify:compatibility` 等脚本校验的是上游仓库元数据，本版未逐一执行 |
+| **工具链坑** | 本环境下 `& "DSH Desktop Beta.exe" script.mjs`（`ELECTRON_RUN_AS_NODE=1`）**不阻塞**：它写出的文件可能落在后续命令之后。把「归一化 → 复制 → 渲染」串起来时必须显式等待，否则会读到旧副本 |
+| **实测环境** | Windows 10/11 + PowerShell 5.1 + Node ≥ 20；`pnpm build` 需要已装依赖 |
+
+## 📚 更多文档
+
+| 文档 | 内容 |
+|------|------|
+| [`NOTICE.md`](NOTICE.md) | 来源与署名（原作者、基线、新增范围） |
+| [`README.original.md`](README.original.md) | 上游英文 README（原样保留，含完整功能说明） |
+| [`README_ZH.original.md`](README_ZH.original.md) | 上游中文 README（原样保留） |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | 上游贡献指南 |
+| [`LICENSE`](LICENSE) | 上游 MIT 许可证 |
+
+## 📄 许可
+
+本版**继承上游 MIT**。原作者的版权声明与许可证原文完整保留在 [`LICENSE`](LICENSE)，本版新增代码同样以 MIT 发布 —— 再分发时请保留原作者署名（见 [`NOTICE.md`](NOTICE.md)）。
+
+---
+
+<sub>dsh-agent-teams 补充版 · 基于上游 v0.1.22 · DSH ≥ 0.2.0-rc.2 · Node ≥ 20 · 原作者 <b>程序员阿江（Relakkes / @NanmiCoder）</b></sub>
