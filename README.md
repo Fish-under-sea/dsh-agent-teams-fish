@@ -3,6 +3,7 @@
 > 本仓库**不是原创插件**，而是对 [NanmiCoder/dsh-agent-teams](https://github.com/NanmiCoder/dsh-agent-teams) 的**个人补充版**：
 > 原插件全部功能与著作权归原作者，本版只在其基础上补了「自定义美术目录 / 厂商头像 / 厂商商标徽标 / 点击放大」等能力。
 > 上游原始 README 与 LICENSE 原样保留（[`README.original.md`](README.original.md) · [`NOTICE.md`](NOTICE.md)）。
+> 已发布到 npm：**`dsh-agent-teams-fish`**（当前 `latest` = `0.1.22`）。
 
 <div align="center">
 
@@ -15,6 +16,7 @@
 ![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)
 ![DSH](https://img.shields.io/badge/DSH-%E2%89%A5%200.2.0--rc.2-22d3ee?style=flat-square)
 ![node](https://img.shields.io/badge/node-%3E%3D20-339933?style=flat-square)
+![npm](https://img.shields.io/npm/v/dsh-agent-teams-fish?style=flat-square&label=npm&color=cb3837)
 
 九个厂商 × 九个岗位的头像、九个厂商商标徽标，全部由**一个自定义目录**接管 —— 不改一行动画代码也能随时换图。
 
