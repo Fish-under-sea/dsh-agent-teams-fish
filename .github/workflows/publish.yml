@@ -22,11 +22,11 @@ concurrency:
 
 jobs:
   verify:
-    if: github.repository == 'NanmiCoder/dsh-agent-teams'
+    if: github.repository == 'Fish-under-sea/dsh-agent-teams-src'
     uses: ./.github/workflows/verify.yml
 
   publish:
-    if: github.repository == 'NanmiCoder/dsh-agent-teams'
+    if: github.repository == 'Fish-under-sea/dsh-agent-teams-src'
     needs: verify
     runs-on: ubuntu-latest
     permissions:
@@ -105,7 +105,9 @@ jobs:
         env:
           PACKAGE_VERSION: ${{ steps.version.outputs.value }}
         run: |
-          CURRENT_LATEST="$(npm view @nanmicoder/dsh-agent-teams dist-tags.latest)"
+          # A brand-new package name has no `latest` yet: treat that as 0.0.0 so
+          # the first release is not blocked by an empty dist-tag lookup.
+          CURRENT_LATEST="$(npm view dsh-agent-teams-fish dist-tags.latest 2>/dev/null || echo 0.0.0)"
           export CURRENT_LATEST
           node --input-type=module <<'JS'
           import assert from 'node:assert/strict'

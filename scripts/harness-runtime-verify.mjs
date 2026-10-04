@@ -112,7 +112,7 @@ if (flags.has('--artifact')) {
     artifactSha = hash(artifact);
     const ownArtifact = join(report, 'artifact-' + artifactSha + '.tgz');
     copyFileSync(artifact, ownArtifact);
-    manifest.dependencies['@nanmicoder/dsh-agent-teams'] = 'file:' + ownArtifact;
+    manifest.dependencies['dsh-agent-teams-fish'] = 'file:' + ownArtifact;
 }
 else if (!flags.has('--prepare-only'))
     throw Error('--artifact required unless --prepare-only');
@@ -126,8 +126,8 @@ if (flags.has('--prepare-only')) {
     console.log('Prepared ' + version + ' with ' + cohort.count + ' exact DSH packages');
     process.exit(0);
 }
-const plugin = JSON.parse(readFileSync(join(runtime, 'node_modules/@nanmicoder/dsh-agent-teams/package.json'), 'utf8'));
-if (plugin.name !== '@nanmicoder/dsh-agent-teams') throw Error('Artifact package identity does not match AgentTeams');
+const plugin = JSON.parse(readFileSync(join(runtime, 'node_modules/dsh-agent-teams-fish/package.json'), 'utf8'));
+if (plugin.name !== 'dsh-agent-teams-fish') throw Error('Artifact package identity does not match AgentTeams');
 const runs = await runRuntimeScenarios({ report, runtime, command, environment, selectedScenarios: flags.has('--scenario') ? [flags.get('--scenario')] : scenarios });
 const passed = runs.every(x => x.passed);
 json(join(report, 'result.json'), { passed, version, artifactSha256: artifactSha, pluginVersion: plugin.version, testFiles, node: process.version, platform: process.platform, arch: process.arch, cohortCount: cohort.count, runs, unverified: ['real provider APIs and credentials', 'browser interaction', 'other operating systems', 'native terminal execution', 'live user-data migration'] });

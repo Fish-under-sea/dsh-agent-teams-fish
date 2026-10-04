@@ -3,7 +3,7 @@ import type { ISidebarRight } from '@deepseek-ai/dsh-client-ui-sidebar-right/cli
 import { type ActivityPanelProps } from './ActivityPanel.tsx';
 import { type WorkspaceActivityState } from './workspace-state.ts';
 export declare const TEAM_TAB_KIND = "agent-teams";
-export declare const TEAM_TAB_ID = "@nanmicoder/dsh-agent-teams/activity";
+export declare const TEAM_TAB_ID = "dsh-agent-teams-fish/activity";
 /** Optional host integration is observable so installing/removing it also switches the fallback. */
 export declare function createWorkspaceBridge(): {
     getSnapshot: () => ISidebarRight | undefined;

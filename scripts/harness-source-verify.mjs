@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { runRuntimeScenarios, runtimeScenarios } from './harness-runtime-scenarios.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const pluginName = '@nanmicoder/dsh-agent-teams';
+const pluginName = 'dsh-agent-teams-fish';
 const isDsh = name => name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-');
 const sha256 = path => createHash('sha256').update(readFileSync(path)).digest('hex');
 const readJson = path => JSON.parse(readFileSync(path, 'utf8'));

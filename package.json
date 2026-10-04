@@ -1,7 +1,7 @@
 {
-  "name": "@nanmicoder/dsh-agent-teams",
+  "name": "dsh-agent-teams-fish",
   "version": "0.1.22",
-  "description": "AgentTeams for DeepSeek Harness: multi-agent team collaboration (captain, members, tasks with dependencies, messaging) driven by natural language, with a tree monitor in the web GUI",
+  "description": "AgentTeams for DeepSeek Harness: multi-agent team collaboration (captain, members, tasks with dependencies, messaging) driven by natural language, with a tree monitor in the web GUI. Community fork of @nanmicoder/dsh-agent-teams adding a custom artwork directory, per-vendor avatars and vendor brand badges",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -25,7 +25,9 @@
     "cordis.patch.yml",
     "release-notes",
     "README.md",
-    "README_ZH.md",
+    "README.original.md",
+    "README_ZH.original.md",
+    "NOTICE.md",
     "compatibility.json",
     "scripts/doctor.mjs",
     "scripts/compatibility.mjs",
@@ -37,13 +39,13 @@
     "email": "relakkes@gmail.com",
     "url": "https://github.com/NanmiCoder"
   },
-  "homepage": "https://github.com/NanmiCoder/dsh-agent-teams#readme",
+  "homepage": "https://github.com/Fish-under-sea/dsh-agent-teams-src#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/NanmiCoder/dsh-agent-teams.git"
+    "url": "git+https://github.com/Fish-under-sea/dsh-agent-teams-src.git"
   },
   "bugs": {
-    "url": "https://github.com/NanmiCoder/dsh-agent-teams/issues"
+    "url": "https://github.com/Fish-under-sea/dsh-agent-teams-src/issues"
   },
   "keywords": [
     "dsh",

@@ -11,7 +11,7 @@ import { createTeamDiscovery, type WorkspaceActivityState } from './workspace-st
 import css from './WorkspaceActivity.module.css'
 
 export const TEAM_TAB_KIND = 'agent-teams'
-export const TEAM_TAB_ID = '@nanmicoder/dsh-agent-teams/activity'
+export const TEAM_TAB_ID = 'dsh-agent-teams-fish/activity'
 
 /** Optional host integration is observable so installing/removing it also switches the fallback. */
 export function createWorkspaceBridge() {

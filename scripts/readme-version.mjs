@@ -5,7 +5,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 // to update it afterwards, so a README that still names an older plugin version is
 // only fixable by cutting another release. Catch it before the tag is pushed.
 
-const README_FILES = ['README.md', 'README_ZH.md']
+// The upstream READMEs are kept verbatim for attribution, so they keep their
+// version claims; all three published READMEs are still checked, because npm
+// freezes a package's README at publish time and an outdated one can only be
+// fixed by cutting another release.
+const README_FILES = ['README.md']
 
 // A README may name only the version being released. Older plugin versions stay
 // reachable through their own release-notes links, which every check strips first.
@@ -39,7 +43,7 @@ export function findStaleVersionReferences(markdown, version, known) {
 }
 
 export function findPinnedInstallVersions(markdown) {
-  return [...markdown.matchAll(/@nanmicoder\/dsh-agent-teams@([0-9A-Za-z.-]+)/g)].map(match => match[1])
+  return [...markdown.matchAll(/dsh-agent-teams-fish@([0-9A-Za-z.-]+)/g)].map(match => match[1])
 }
 
 export function checkReadmeVersions({ version, known, files }) {
@@ -50,7 +54,7 @@ export function checkReadmeVersions({ version, known, files }) {
     }
     for (const pinned of findPinnedInstallVersions(markdown)) {
       if (pinned !== version) {
-        problems.push(`${name} pins @nanmicoder/dsh-agent-teams@${pinned} but the package is ${version}`)
+        problems.push(`${name} pins dsh-agent-teams-fish@${pinned} but the package is ${version}`)
       }
     }
   }

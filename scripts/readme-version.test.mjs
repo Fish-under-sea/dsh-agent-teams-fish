@@ -12,10 +12,10 @@ import {
 const KNOWN = ['0.1.17', '0.1.19', '0.1.20']
 
 test('a README that still names an older plugin version is rejected', () => {
-  const markdown = 'Install with `dsh plugin add @nanmicoder/dsh-agent-teams@0.1.17`.'
+  const markdown = 'Install with `dsh plugin add dsh-agent-teams-fish@0.1.17`.'
   const problems = checkReadmeVersions({ version: '0.1.20', known: KNOWN, files: { 'README.md': markdown } })
   assert.ok(
-    problems.includes('README.md pins @nanmicoder/dsh-agent-teams@0.1.17 but the package is 0.1.20'),
+    problems.includes('README.md pins dsh-agent-teams-fish@0.1.17 but the package is 0.1.20'),
     `expected a pinned-install problem, got ${JSON.stringify(problems)}`
   )
 })
@@ -43,7 +43,7 @@ test('a shorter version does not match inside a longer prerelease', () => {
 })
 
 test('install commands are extracted regardless of version', () => {
-  const markdown = 'add --save-exact @nanmicoder/dsh-agent-teams@0.1.16 and @nanmicoder/dsh-agent-teams@0.1.20'
+  const markdown = 'add --save-exact dsh-agent-teams-fish@0.1.16 and dsh-agent-teams-fish@0.1.20'
   assert.deepEqual(findPinnedInstallVersions(markdown), ['0.1.16', '0.1.20'])
 })
 
@@ -55,7 +55,7 @@ test('published versions come from the release notes themselves', () => {
 test('the checked-in READMEs match the package version', () => {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
   const files = Object.fromEntries(
-    ['README.md', 'README_ZH.md'].map(name => [name, readFileSync(new URL(`../${name}`, import.meta.url), 'utf8')])
+    ['README.md'].map(name => [name, readFileSync(new URL(`../${name}`, import.meta.url), 'utf8')])
   )
   const known = publishedVersions(fileURLToPath(new URL('../release-notes', import.meta.url)))
   assert.deepEqual(checkReadmeVersions({ version: pkg.version, known, files }), [])

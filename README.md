@@ -29,7 +29,8 @@
 | 插件名 | **dsh-agent-teams**（把一次 DeepSeek Harness 会话变成可协作的多智能体团队） |
 | 原作者 | **程序员阿江（Relakkes）** · GitHub [@NanmiCoder](https://github.com/NanmiCoder) · relakkes@gmail.com |
 | 原仓库 | <https://github.com/NanmiCoder/dsh-agent-teams> |
-| npm 包名 | `@nanmicoder/dsh-agent-teams` |
+| 上游 npm 包名 | `@nanmicoder/dsh-agent-teams`（**归原作者，本版不能沿用**） |
+| 本版 npm 包名 | **`dsh-agent-teams-fish`** |
 | 许可证 | **MIT**，版权归原作者（本仓库 [`LICENSE`](LICENSE) **未做任何修改**） |
 | 本版基线 | 上游 tag `v0.1.22`（commit `9cba4fe`） |
 | 本版性质 | **补充版（fork）**，非原创、非官方；上游原始 README 完整保留为 [`README.original.md`](README.original.md) / [`README_ZH.original.md`](README_ZH.original.md) |
@@ -112,7 +113,24 @@
 
 ## 🚀 安装与启用
 
-### 方式一：覆盖构建产物（本机在用的方式）
+### 方式一：从 npm 安装（推荐）
+
+```bash
+# 装进某个 profile：`dsh plugin` 会做 pnpm 安装并把本包对账进 bundles 层
+dsh plugin --profile <profile> add dsh-agent-teams-fish
+```
+
+```jsonc
+// 或手工写进 profiles/<profile>/package.json
+"dependencies": {
+  "dsh-agent-teams-fish": "^0.1.22"
+}
+```
+
+> 本版 npm 包名是 **`dsh-agent-teams-fish`**：上游包名 `@nanmicoder/dsh-agent-teams` 属于原作者，本版无法沿用。
+> 改名会牵动三处必须一致 —— `package.json` 的 `name`、`cordis.patch.yml` 的插件行 `name`、客户端包的注册 `id`（不一致会报 `loaded without registering`）。
+
+### 方式二：覆盖构建产物（本机在用的方式）
 
 ```powershell
 pnpm install
@@ -126,20 +144,20 @@ Copy-Item .\assets\* "<DSH_HOME>\profiles\<profile>\node_modules\@nanmicoder\dsh
 
 > **宿主代码改动必须重启 DSH**；纯客户端包改动**刷新页面**即可换新。
 
-### 方式二：从 GitHub 安装
+### 方式三：从 GitHub 安装
 
 ```jsonc
 // profiles/<profile>/package.json
 "dependencies": {
-  "@nanmicoder/dsh-agent-teams": "github:Fish-under-sea/dsh-agent-teams-src"
+  "dsh-agent-teams-fish": "github:Fish-under-sea/dsh-agent-teams-src"
 }
 ```
 
-### 方式三：本地 link 源码（改完源码重装即生效）
+### 方式四：本地 link 源码（改完源码重装即生效）
 
 ```jsonc
 "dependencies": {
-  "@nanmicoder/dsh-agent-teams": "link:<本仓库路径>"
+  "dsh-agent-teams-fish": "link:<本仓库路径>"
 }
 ```
 
@@ -203,7 +221,7 @@ dsh-agent-teams-src/
 | **打包同名 URL 会被浏览器缓存 24h** | 打包图带 `max-age=86400`：某 URL 先请求过一次打包图，之后再放自定义文件，浏览器 24h 内不会重新请求，看着就像「改了没生效」（队长真踩过）。现已双重规避：队长改请求**全新 URL** + 配了目录就一律 `no-store` |
 | **硬刷新例外仍在** | 替换「同时也随插件发布」的文件名（`team-lead-v2.png`、`member-<role>-v2.png`、`action-*.png`）第一次需 `Ctrl+Shift+R` 挤掉旧缓存 |
 | **美术不随仓库分发** | 81 张角色图与 9 个商标 SVG **不在本仓库**，需自备目录。角色图是各家角色的 AI 二次创作、商标是各厂商商标，**版权归各厂商**，仅供个人学习使用；商用或再分发请自行评估 |
-| **`lib/` 是构建产物** | 与上游一致随仓库跟踪（便于 GitHub 直装），所以一次构建的 diff 较大；**未改 `package.json`**（包名与版本保持上游，因为装机路径与 profile 配置依赖它） |
+| **`lib/` 是构建产物** | 与上游一致随仓库跟踪（便于 GitHub 直装），所以一次构建的 diff 较大。`package.json` 只改身份字段：包名换成 `dsh-agent-teams-fish`、`repository`/`homepage`/`bugs` 指向本仓库，**版本与 `author` 保持上游不变**；改名会牵动插件行与客户端注册名，装机时 profile 要同步改 |
 | **未跑上游发布校验** | 上游 `verify:release` / `verify:compatibility` 等脚本校验的是上游仓库元数据，本版未逐一执行 |
 | **工具链坑** | 本环境下 `& "DSH Desktop Beta.exe" script.mjs`（`ELECTRON_RUN_AS_NODE=1`）**不阻塞**：它写出的文件可能落在后续命令之后。把「归一化 → 复制 → 渲染」串起来时必须显式等待，否则会读到旧副本 |
 | **实测环境** | Windows 10/11 + PowerShell 5.1 + Node ≥ 20；`pnpm build` 需要已装依赖 |

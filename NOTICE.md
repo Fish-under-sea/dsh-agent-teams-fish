@@ -35,7 +35,8 @@
 - 上游原始 README 完整保留为 [`README.original.md`](README.original.md) 与 [`README_ZH.original.md`](README_ZH.original.md)，未做任何修改。
 - 上游 `CONTRIBUTING.md` 原样保留。
 - 本版新增代码同样以 **MIT** 发布；再分发时请保留本文件与上游署名。
-- `package.json` 未改动：包名仍为 `@nanmicoder/dsh-agent-teams`、版本仍为 `0.1.22`（装机路径与 profile 配置依赖该包名）。
+- `package.json` 只改身份字段：包名为本版的 **`dsh-agent-teams-fish`**（上游包名 `@nanmicoder/dsh-agent-teams` 属原作者，本版无法沿用），`repository` / `homepage` / `bugs` 指向本仓库；**版本 `0.1.22`、`author`、`license` 保持上游不变**。
+- 包名牵动三处必须同步，否则插件加载失败：`package.json` 的 `name`、`cordis.patch.yml` 的插件行 `name`、客户端包 `lib/client.js` 的注册 `id`（不一致会报 `loaded without registering`）。
 
 ## 美术素材与商标
 
