@@ -15,9 +15,24 @@ function files(root, directory) {
     return [path]
   }).sort()
 }
+/**
+ * Bytes of one hashed input, with line endings normalised to LF.
+ *
+ * A CRLF checkout on Windows and an LF checkout on a Linux runner are the same
+ * source tree, but hashing raw bytes made the stamp valid for exactly one
+ * working directory: a fresh checkout then failed with "Git artifacts are stale
+ * or modified" at the very same commit. Normalisation is deterministic, so a
+ * digest still only changes when a file's content changes; a lone CR (no LF) is
+ * left untouched.
+ */
+function normalisedBytes(path) {
+  const bytes = readFileSync(path)
+  if (!bytes.includes(0x0d)) return bytes
+  return Buffer.from(bytes.toString('latin1').replace(/\r\n/g, '\n'), 'latin1')
+}
 function digest(root, paths, prefix = '') {
   const hash = createHash('sha256').update(prefix)
-  for (const path of [...paths].sort()) hash.update(path).update('\0').update(readFileSync(join(root, path))).update('\0')
+  for (const path of [...paths].sort()) hash.update(path).update('\0').update(normalisedBytes(join(root, path))).update('\0')
   return hash.digest('hex')
 }
 function current(root) {

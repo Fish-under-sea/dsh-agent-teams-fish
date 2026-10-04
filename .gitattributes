@@ -1,0 +1,20 @@
+# Line endings of every file hashed by scripts/git-artifacts.mjs are pinned here.
+#
+# Without this, a CRLF checkout (Windows, core.autocrlf=true) and an LF checkout
+# (Linux CI) disagreed byte for byte, and the committed lib/git-artifact-stamp.json
+# only ever matched the working directory that wrote it — so the Verify workflow
+# failed on Ubuntu with "Git artifacts are stale or modified" while the Windows
+# job, which rebuilds the stamp, stayed green.
+#
+# src/** and the build-configuration inputs below are normalised to LF in the
+# repository and in every checkout. The build output (lib/**) is not pinned: the
+# digest normalises line endings for it, and a Windows toolchain is free to emit
+# whatever it emits.
+src/** text eol=lf
+tsconfig.json text eol=lf
+tsconfig.client.json text eol=lf
+tsdown.config.ts text eol=lf
+pnpm-lock.yaml text eol=lf
+pnpm-workspace.yaml text eol=lf
+scripts/clean-build.mjs text eol=lf
+scripts/git-artifacts.mjs text eol=lf
