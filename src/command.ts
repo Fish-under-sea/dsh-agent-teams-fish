@@ -88,7 +88,7 @@ export function registerAgentTeamsCommand(ctx: Context, getProfiles: () => Recor
     const dispose: Array<() => void> = []
     dispose.push(ctx.commands.register({
       name: AGENT_TEAMS_COMMAND,
-      description: '用多智能体团队执行目标（你成为队长）',
+      description: '智能体团队 · 用多智能体团队执行目标（你成为队长）',
       input: { hint: '[--profile <name>] <goal>' },
       handler(invocation: CommandInvocation): CommandResult {
         let parsed: AgentTeamsInvocation
@@ -104,7 +104,7 @@ export function registerAgentTeamsCommand(ctx: Context, getProfiles: () => Recor
       if (commandName === undefined) continue
       dispose.push(ctx.commands.register({
         name: commandName,
-        description: `用 AgentTeams 的 ${profileName} profile 执行目标`,
+        description: `智能体团队 · 用 AgentTeams 的 ${profileName} profile 执行目标`,
         input: { hint: '<goal>' },
         handler(invocation: CommandInvocation): CommandResult {
           const profile = profileForCommand(commandName, getProfiles())
