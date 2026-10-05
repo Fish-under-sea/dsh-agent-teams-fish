@@ -11,6 +11,24 @@
  */
 /** Artwork route prefix served by the plugin host half. */
 export declare const ART_BASE = "/plugins/dsh-agent-teams/assets/";
+/** Chinese label map for role tokens.
+ * Used by tests and as a reference lookup; the UI itself uses `labelKey` + `t()` for i18n.
+ */
+export declare const ROLE_LABELS: Readonly<Record<string, string>>;
+type AgentTeamsLocaleKey = import('./locales.ts').AgentTeamsLocaleKey;
+/** Resolved artwork for one member. */
+export interface ResolvedMemberArtwork {
+    /** Avatar URL, or null when neither role nor vendor is known. */
+    url: string | null;
+    /** Large preview URL, or null when neither role nor vendor is known. */
+    full: string | null;
+    /** Matched role token, or null when no role matched. */
+    role: string | null;
+    /** Locale key for the role's Chinese label, or null when no role matched. */
+    labelKey: AgentTeamsLocaleKey | null;
+    /** True when the image is the vendor-generic fallback because no role matched. */
+    isFallback: boolean;
+}
 /**
  * Captain artwork. The vendor-specific name is requested first, and a custom
  * `team-lead-v2.png` still answers it through the host's degradation chain, so
@@ -42,6 +60,30 @@ export declare function vendorSlug(member: {
  */
 export declare function memberRoleSlug(name: string, role: string): string | null;
 /**
+ * Unified artwork resolver. Implements the client-side degradation chain:
+ * role+vendor → role → vendor → initial-letter fallback.
+ *
+ * - If a role matches, request `member-<vendor>-<role>-v2.png` (or the generic
+ *   role image when the vendor is unknown).
+ * - If no role matches but the vendor is known, request the vendor-generic
+ *   `member-<vendor>-v2.png` and mark it as a fallback.
+ * - If neither role nor vendor is known, return null so the caller can fall back
+ *   to the initial-letter badge.
+ * @param options - member display name, role text, and optional vendor token.
+ */
+export declare function resolveMemberArtwork({ name: _name, role, vendor, }: {
+    name: string;
+    role: string;
+    vendor?: string;
+}): ResolvedMemberArtwork;
+/** Format the caption under the enlarged member/leader artwork preview. */
+export declare function formatArtPreviewCaption({ name, labelKey, kind, t, }: {
+    name: string;
+    labelKey: AgentTeamsLocaleKey | null;
+    kind: 'captain' | 'member';
+    t: import('./locales.ts').AgentTeamsTranslate;
+}): string;
+/**
  * Member artwork URL, or null when no role matches (initial-letter fallback).
  * @param name - the member's display name.
  * @param role - the member's role text.
@@ -65,3 +107,4 @@ export declare function brandArtUrl(vendor: string | undefined): string | null;
  * @returns the large-preview URL, or null when no role matched.
  */
 export declare function memberFullArtUrl(name: string, role: string, vendor?: string): string | null;
+export {};

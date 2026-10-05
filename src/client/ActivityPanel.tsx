@@ -58,7 +58,7 @@ import {
   type ActivityTask,
   type ActivityTeam,
 } from './activity-monitor.ts'
-import { ACTION_ART, LEAD_ART, LEAD_FULL_ART, brandArtUrl, memberArtUrl, memberFullArtUrl, vendorSlug } from './artwork.ts'
+import { ACTION_ART, LEAD_ART, LEAD_FULL_ART, brandArtUrl, formatArtPreviewCaption, resolveMemberArtwork, vendorSlug } from './artwork.ts'
 import { OPEN_PANEL_EVENT } from './AgentTeamsCard.tsx'
 import { StagingPlanEditor } from './StagingPlanEditor.tsx'
 import type { AgentTeamsCardData } from './agent-teams-card-definition.ts'
@@ -120,6 +120,40 @@ function initialPanelBounds(): PanelBounds {
 /** Initial-letter fallback for unmatched roles. */
 function memberInitial(name: string): string {
   return name.trim().slice(0, 1).toUpperCase() || '?'
+}
+
+/** Member avatar with broken-image fallback to the initial-letter badge. */
+function MemberAvatar({
+  id,
+  name,
+  art,
+  fullArt,
+  title,
+  onZoom,
+}: {
+  readonly id: string
+  readonly name: string
+  readonly art: string | null
+  readonly fullArt: string | null
+  readonly title: string
+  readonly onZoom?: (event: React.MouseEvent<HTMLImageElement>) => void
+}) {
+  const [failed, setFailed] = useState(false)
+  if (art === null || failed) {
+    return <span className={css.memberInitial} style={{ background: accentOf(id) }}>{memberInitial(name)}</span>
+  }
+  return (
+    <img
+      className={css.memberArt}
+      src={art}
+      alt=""
+      aria-hidden
+      data-art-zoom={fullArt ?? art}
+      title={title}
+      onClick={onZoom}
+      onError={() => { setFailed(true) }}
+    />
+  )
 }
 
 function stableHash(value: string): number {
@@ -504,7 +538,7 @@ export function TeamSection({ team, modelDirectory, onContinuePlanning, onDiscar
   // Click-to-enlarge artwork: a 40px roster avatar cannot show the character's
   // role props, so a click opens the `-full` art. The host degrades a missing
   // large file to the avatar art, so requesting it is always safe.
-  const [artPreview, setArtPreview] = useState<{ name: string; url: string } | null>(null)
+  const [artPreview, setArtPreview] = useState<{ name: string; url: string; labelKey: import('./locales.ts').AgentTeamsLocaleKey | null; kind: 'captain' | 'member' } | null>(null)
   useEffect(() => {
     if (artPreview === null) return undefined
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -601,7 +635,7 @@ export function TeamSection({ team, modelDirectory, onContinuePlanning, onDiscar
               aria-hidden
               data-art-zoom={LEAD_FULL_ART}
               title={t('member.art.zoom')}
-              onClick={() => { setArtPreview({ name: t('captain.name'), url: LEAD_FULL_ART }) }}
+              onClick={() => { setArtPreview({ name: t('captain.name'), url: LEAD_FULL_ART, labelKey: null, kind: 'captain' }) }}
             />
           </span>
           <span className={css.captainInfo}>
@@ -668,8 +702,10 @@ export function TeamSection({ team, modelDirectory, onContinuePlanning, onDiscar
                   const owned = team.tasks.filter((task) => task.assignee === member.name)
                   const memberModel = memberRouteLabel(member)
                   const vendor = vendorSlug(member)
-                  const art = memberArtUrl(member.name, member.role, vendor)
-                  const fullArt = memberFullArtUrl(member.name, member.role, vendor)
+                  const resolved = resolveMemberArtwork({ name: member.name, role: member.role, vendor })
+                  const tooltip = resolved.labelKey !== null
+                    ? `${t('member.art.rolePrefix')}${t(resolved.labelKey)} · ${t('member.art.zoom')}`
+                    : t('member.art.fallbackLabel')
                   // The badge shows the vendor's brand mark when we know it,
                   // and the packaged activity art otherwise.
                   const brand = brandArtUrl(vendor)
@@ -687,25 +723,22 @@ export function TeamSection({ team, modelDirectory, onContinuePlanning, onDiscar
                   }}
                 >
                   <span className={css.memberAvatar} data-unread={member.unread > 0}>
-                    {art !== null ? (
-                      <img
-                        className={css.memberArt}
-                        src={art}
-                        alt=""
-                        aria-hidden
-                        data-art-zoom={fullArt ?? art}
-                        title={t('member.art.zoom')}
-                        onClick={(event) => {
-                          // Zoom instead of navigating: the roster avatar is far
-                          // too small to recognise the character's role props.
-                          event.preventDefault()
-                          event.stopPropagation()
-                          setArtPreview({ name: member.name, url: fullArt ?? art })
-                        }}
-                      />
-                    ) : (
-                      <span className={css.memberInitial} style={{ background: accentOf(member.id) }}>{memberInitial(member.name)}</span>
-                    )}
+                    <MemberAvatar
+                      id={member.id}
+                      name={member.name}
+                      art={resolved.url}
+                      fullArt={resolved.full}
+                      title={tooltip}
+                      onZoom={(event) => {
+                        // Zoom instead of navigating: the roster avatar is far
+                        // too small to recognise the character's role props.
+                        event.preventDefault()
+                        event.stopPropagation()
+                        if (resolved.full !== null || resolved.url !== null) {
+                          setArtPreview({ name: member.name, url: resolved.full ?? resolved.url!, labelKey: resolved.labelKey, kind: 'member' })
+                        }
+                      }}
+                    />
                     <img
                       className={css.stateArt}
                       data-activity={member.activity}
@@ -822,7 +855,9 @@ export function TeamSection({ team, modelDirectory, onContinuePlanning, onDiscar
         >
           <figure className={css.artPreviewCard}>
             <img className={css.artPreviewImage} src={artPreview.url} alt="" />
-            <figcaption className={css.artPreviewCaption}>{artPreview.name}</figcaption>
+            <figcaption className={css.artPreviewCaption}>
+              {formatArtPreviewCaption({ name: artPreview.name, labelKey: artPreview.labelKey, kind: artPreview.kind, t })}
+            </figcaption>
           </figure>
         </div>
       )}

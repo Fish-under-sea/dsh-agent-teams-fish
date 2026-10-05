@@ -3,7 +3,7 @@
 > 本仓库**不是原创插件**，而是对 [NanmiCoder/dsh-agent-teams](https://github.com/NanmiCoder/dsh-agent-teams) 的**个人补充版**：
 > 原插件全部功能与著作权归原作者，本版只在其基础上补了「自定义美术目录 / 厂商头像 / 厂商商标徽标 / 点击放大」等能力。
 > 上游原始 README 与 LICENSE 原样保留（[`README.original.md`](README.original.md) · [`NOTICE.md`](NOTICE.md)）。
-> 已发布到 npm：**`dsh-agent-teams-fish`**（当前 `latest` = `0.1.23`）；也已并入自建聚合包 **[`@fish-under-sea/dsh-fish`](https://github.com/Fish-under-sea/dsh-fish)** —— 装那一个包就会把本插件一起装出来。
+> 已发布到 npm：**`dsh-agent-teams-fish`**（当前 `latest` = `0.1.24`）；也已并入自建聚合包 **[`@fish-under-sea/dsh-fish`](https://github.com/Fish-under-sea/dsh-fish)** —— 装那一个包就会把本插件一起装出来。
 
 <div align="center">
 
