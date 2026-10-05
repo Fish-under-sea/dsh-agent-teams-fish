@@ -28,7 +28,7 @@ const ROLE_CASES = [
 
 /** 负例：不得牵强命中，必须返回 null。 */
 const NEGATIVE_CASES = [
-  '音频引擎：程序化音色合成',
+  // 「音频」相关文本自 2026-10-05 起命中 audio 桶（它是正式岗位词），故不再作为负例。
   'BPM 主时钟',
   'Loop Pad 触发、混音总线、录音导出',
 ]
@@ -69,6 +69,14 @@ test('负例保持未命中，返回 null', () => {
   }
 })
 
+test('作者/写手与音频、视频都命中对应岗位（不再掉兜底头像）', () => {
+  // 实机复现过的漏词：成员名/角色写成 *-author 时旧规则只认 writer，整队掉厂商通用大图。
+  assert.equal(memberRoleSlug('成员', '插件详情页写手 plugin-author'), 'docs')
+  assert.equal(memberRoleSlug('成员', '首页与安装页作者 home-author'), 'docs')
+  assert.equal(memberRoleSlug('成员', '音频引擎：程序化音色合成'), 'audio')
+  assert.equal(memberRoleSlug('成员', '视频渲染与剪辑'), 'video')
+})
+
 test('厂商矩阵命中正确厂商，minimax-m3 保持未识别', () => {
   for (const { provider, model, expected } of VENDOR_CASES) {
     assert.equal(vendorSlug({ provider, model }), expected, `${provider}/${model} 应命中 ${expected}`)
@@ -100,7 +108,7 @@ test('resolveMemberArtwork：命中岗位但厂商未知 → 通用岗位图', (
 })
 
 test('resolveMemberArtwork：未命中岗位但厂商已知 → 厂商通用大图兜底', () => {
-  const result = resolveMemberArtwork({ name: '音频', role: '程序化音色合成', vendor: 'qwen' })
+  const result = resolveMemberArtwork({ name: '节拍', role: 'BPM 主时钟', vendor: 'qwen' })
   assert.equal(result.url, '/plugins/dsh-agent-teams/assets/member-qwen-v2.png')
   assert.equal(result.full, '/plugins/dsh-agent-teams/assets/member-qwen-full-v2.png')
   assert.equal(result.role, null)
@@ -109,7 +117,7 @@ test('resolveMemberArtwork：未命中岗位但厂商已知 → 厂商通用大�
 })
 
 test('resolveMemberArtwork：未命中岗位且厂商未知 → null（首字母兜底）', () => {
-  const result = resolveMemberArtwork({ name: '音频', role: '程序化音色合成', vendor: undefined })
+  const result = resolveMemberArtwork({ name: '节拍', role: 'BPM 主时钟', vendor: undefined })
   assert.equal(result.url, null)
   assert.equal(result.full, null)
   assert.equal(result.role, null)
@@ -193,9 +201,9 @@ test('qwen-security 角色含 verify.ps1 文件名和 security/audit 自描述�
 })
 
 /** t9 保留未命中：audio 不应被牵强命中 */
-test('音频引擎保持未命中，走厂商大图兜底', () => {
-  assert.equal(memberRoleSlug('audio', '音频引擎：程序化音色合成、BPM 主时钟、Loop Pad 触发、混音总线、录音导出'), null)
-  assert.equal(memberRoleSlug('synth', '音频引擎：程序化音色合成、BPM 主时钟、Loop Pad 触发、混音总线、录音导出'), null)
+test('音频引擎命中 audio 岗位（2026-10-05 起有专属岗位，不再掉兜底图）', () => {
+  assert.equal(memberRoleSlug('audio', '音频引擎：程序化音色合成、BPM 主时钟、Loop Pad 触发、混音总线、录音导出'), 'audio')
+  assert.equal(memberRoleSlug('synth', '音频引擎：程序化音色合成、BPM 主时钟、Loop Pad 触发、混音总线、录音导出'), 'audio')
 })
 
 /** t9 负例：防止过度放宽 */
@@ -220,9 +228,9 @@ test('战局层含连击、计分、准确度等文字命中 data', () => {
   assert.equal(memberRoleSlug('scorer', '战局层：节拍准确度判定、连击加分、每 16 拍欢呼与中心结算飞向右上角'), 'data')
 })
 
-test('音频引擎与合成器保持未命中，等待后续单独岗位', () => {
-  assert.equal(memberRoleSlug('audio', '音频引擎：程序化音色合成、BPM 主时钟、Loop Pad 触发、混音总线、录音导出'), null)
-  assert.equal(memberRoleSlug('synth', '音频引擎：程序化音色合成、BPM 主时钟、Loop Pad 触发、混音总线、录音导出'), null)
+test('视频与动画命中 video 岗位（不与 designer 的「动效」互抢）', () => {
+  assert.equal(memberRoleSlug('video', '视频渲染与剪辑'), 'video')
+  assert.equal(memberRoleSlug('anim', '逐帧动画与字幕'), 'video')
 })
 
 /** t11 反证负例：data 新词不能过度放宽 */

@@ -26,6 +26,7 @@ import { AgentTeamsCard, type AgentTeamsCardInjected } from './AgentTeamsCard.ts
 import { agentTeamsCardDefinition } from './agent-teams-card-definition.ts'
 import {
   AGENT_TEAMS_LOCALE_NAMESPACE, en, zh, type AgentTeamsLocaleKey,
+  COMMAND_LOCALE_NAMESPACE, commandEn, commandZh, type CommandLocaleKey,
 } from './locales.ts'
 import { openAgentTeamMember, type AgentTeamsLayoutNavigator, type AgentTeamsWorkspaceNavigator } from './session-navigation.ts'
 
@@ -38,6 +39,13 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 /** Required services: conversation nodes, slots, sessions navigation, and locale. */
 export const inject = ['uiConversation', 'slots', 'sessions', 'locale', 'modelDirectories', 'layout']
+
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface LocaleNamespaceMap {
+    /** Harness command-palette dictionaries (`locale.bind('command')`). */
+    command: CommandLocaleKey
+  }
+}
 
 /** The host supplies this hook for the lifetime of a 0.1.5 root slot. */
 interface PanelNavigationProps {
@@ -61,6 +69,10 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(
     () => ctx.locale.register(AGENT_TEAMS_LOCALE_NAMESPACE, { zh, en }),
     'agent-teams: dictionaries',
+  )
+  ctx.effect(
+    () => ctx.locale.register(COMMAND_LOCALE_NAMESPACE, { zh: commandZh, en: commandEn }),
+    'agent-teams: command palette dictionary',
   )
   const openMember = (parentId: SessionId, childId: SessionId): void => {
     void openAgentTeamMember(ctx.sessions, parentId, childId, ctx.layout as AgentTeamsLayoutNavigator, ctx.get('uiWorkspace') as AgentTeamsWorkspaceNavigator | undefined).catch((error: unknown) => {

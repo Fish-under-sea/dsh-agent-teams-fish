@@ -36,12 +36,15 @@ test('every packaged slug stays servable exactly as shipped', () => {
   }
 })
 
-test('vendor namespaces cover the 9 vendors and 8 roles', () => {
+test('vendor namespaces cover the 9 vendors and 10 roles', () => {
   assert.equal(ARTWORK_VENDORS.length, 9)
-  assert.equal(ARTWORK_ROLES.length, 8)
+  assert.equal(ARTWORK_ROLES.length, 10)
   assert.ok(ARTWORK_VENDORS.includes('deepseek'))
   assert.ok(ARTWORK_VENDORS.includes('hunyuan'))
   assert.ok(ARTWORK_ROLES.includes('operator'))
+  // 2026-10-05：新增 audio / video 桶（美术尚未出图，命中后沿 vendor/team-lead 兜底）。
+  assert.ok(ARTWORK_ROLES.includes('audio'))
+  assert.ok(ARTWORK_ROLES.includes('video'))
 })
 
 test('a brand request lists the svg, its png sibling, then the family default', () => {

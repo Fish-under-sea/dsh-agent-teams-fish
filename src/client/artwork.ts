@@ -25,6 +25,9 @@ export const ART_BASE = '/plugins/dsh-agent-teams/assets/'
  * 4. engineer 范围较广，放在 qa/security 之后，避免把“质量/审计”类词误吞。
  */
 const ROLE_ART: ReadonlyArray<readonly [RegExp, string]> = [
+  // audio / video 是最窄的桶，必须前置：否则「视频渲染」会被 engineer 的「渲染/实现」吞掉。
+  [/\baudio\b|sound|\bvoice\b|music|\btts\b|音频|语音|音效|音乐|配音/, 'audio'],
+  [/\bvideo\b|\bfilm\b|movie|animat|\bclip\b|视频|影片|剪辑|动画|字幕/, 'video'],
   [/data|analys|metric|performance|埋点|统计|报表|指标|数据|分析|性能|连击|计分|得分|评分|分数/, 'data'],
   [/resear|investig|explor|study|调研|研究|调查|探索|资料|情报/, 'researcher'],
   // Match compound QA titles (for example "QA Engineer") before the broad
@@ -37,7 +40,7 @@ const ROLE_ART: ReadonlyArray<readonly [RegExp, string]> = [
   [/engineer|dev\b|server|backend|\bapi\b|runtime|watcher|contract|架构|模块|接口|运行时|装配|工程|后端|服务|开发|代码|编程|实现/, 'engineer'],
   [/design|\bui\b|\bux\b|front|theme|accessib|视觉|界面|样式|皮肤|动效|设计|前端|主题|无障碍|美术|插画|立绘|出图|绘制|美工|交互/, 'designer'],
   [/secur|audit|risk|threat|review|合规|风控|权限|审计|安全|审查|风险/, 'security'],
-  [/docs|writer|product|spec|说明|手册|教程|文案|撰写|写作|文档|规范/, 'docs'],
+  [/docs|writer|author|edit|readme|product|spec|说明|手册|教程|文案|撰写|写作|作者|写手|文档|规范/, 'docs'],
   [/release|\bbuild\b|deploy|\bops\b|\bci\b|ship|coordin|部署|发布|上线|流水线|调度|编排|构建|运维|协调/, 'operator'],
 ]
 
@@ -72,6 +75,8 @@ export const ROLE_LABELS: Readonly<Record<string, string>> = {
   docs: '文档与文案',
   data: '数据与分析',
   operator: '运维与发布',
+  audio: '音频与语音',
+  video: '视频与动画',
   'team-lead': '队长',
 }
 

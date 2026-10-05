@@ -89,7 +89,7 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 
 ```jsonc
 "dependencies": {
-  "dsh-agent-teams-fish": "^0.1.25"
+  "dsh-agent-teams-fish": "^0.1.26"
 }
 ```
 
