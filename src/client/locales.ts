@@ -460,29 +460,6 @@ export const en = {
   'archive.discardedLabel': 'Plan discarded · Archived history',
 } satisfies Record<AgentTeamsLocaleKey, string>
 
-/**
- * Command-palette namespace owned by the Harness UI (`locale.bind('command')`).
- * The Host descriptor keeps its English text; the palette reads
- * `label.<command>` / `description.<command>` from this namespace, exactly like
- * the built-in Host commands do.
- */
-export const COMMAND_LOCALE_NAMESPACE = 'command'
-
-/** Palette copy for this plugin's slash command (Simplified Chinese). */
-export const commandZh = {
-  'label.agent-teams': '智能体团队',
-  'description.agent-teams': '用多智能体团队执行目标（你成为队长）',
-} satisfies Record<string, string>
-
-/** Palette copy for this plugin's slash command (English). */
-export const commandEn = {
-  'label.agent-teams': 'AgentTeams',
-  'description.agent-teams': 'Run a goal with a multi-agent team (you become the captain)',
-} satisfies Record<keyof typeof commandZh, string>
-
-/** Key space contributed to the Harness command-palette namespace. */
-export type CommandLocaleKey = keyof typeof commandZh
-
 /** Translation function consumed by pure view helpers. */
 export type AgentTeamsTranslate = (
   key: AgentTeamsLocaleKey,

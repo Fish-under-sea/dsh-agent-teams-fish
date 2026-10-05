@@ -1,6 +1,6 @@
 /** Browser plugin for the AgentTeams activity floater and conversation card. */
 import type { Context as ClientContext } from '@deepseek-ai/cordis';
-import { type AgentTeamsLocaleKey, type CommandLocaleKey } from './locales.ts';
+import { type AgentTeamsLocaleKey } from './locales.ts';
 declare module '@deepseek-ai/dsh-client-ui-slots' {
     interface LocaleNamespaceMap {
         /** AgentTeams conversation card and activity monitor copy. */
@@ -9,12 +9,6 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 /** Required services: conversation nodes, slots, sessions navigation, and locale. */
 export declare const inject: string[];
-declare module '@deepseek-ai/dsh-client-ui-slots' {
-    interface LocaleNamespaceMap {
-        /** Harness command-palette dictionaries (`locale.bind('command')`). */
-        command: CommandLocaleKey;
-    }
-}
 /**
  * Register the activity monitor in the shell's additive overlay and the
  * in-conversation team card. The card's activity button re-opens a folded

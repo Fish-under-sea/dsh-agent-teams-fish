@@ -453,24 +453,5 @@ export declare const en: {
     'archive.label': string;
     'archive.discardedLabel': string;
 };
-/**
- * Command-palette namespace owned by the Harness UI (`locale.bind('command')`).
- * The Host descriptor keeps its English text; the palette reads
- * `label.<command>` / `description.<command>` from this namespace, exactly like
- * the built-in Host commands do.
- */
-export declare const COMMAND_LOCALE_NAMESPACE = "command";
-/** Palette copy for this plugin's slash command (Simplified Chinese). */
-export declare const commandZh: {
-    'label.agent-teams': string;
-    'description.agent-teams': string;
-};
-/** Palette copy for this plugin's slash command (English). */
-export declare const commandEn: {
-    'label.agent-teams': string;
-    'description.agent-teams': string;
-};
-/** Key space contributed to the Harness command-palette namespace. */
-export type CommandLocaleKey = keyof typeof commandZh;
 /** Translation function consumed by pure view helpers. */
 export type AgentTeamsTranslate = (key: AgentTeamsLocaleKey, params?: Record<string, unknown>) => string;

@@ -88,7 +88,7 @@ export function registerAgentTeamsCommand(ctx: Context, getProfiles: () => Recor
     const dispose: Array<() => void> = []
     dispose.push(ctx.commands.register({
       name: AGENT_TEAMS_COMMAND,
-      description: 'run a goal with a multi-agent team (you become the captain)',
+      description: '用多智能体团队执行目标（你成为队长）',
       input: { hint: '[--profile <name>] <goal>' },
       handler(invocation: CommandInvocation): CommandResult {
         let parsed: AgentTeamsInvocation
@@ -96,7 +96,7 @@ export function registerAgentTeamsCommand(ctx: Context, getProfiles: () => Recor
         if (parsed.profile !== undefined && !Object.keys(getProfiles()).some(key => key.trim() === parsed.profile)) return { kind: 'error', text: `unknown AgentTeams profile "${parsed.profile}"` }
         if (parsed.profile === undefined && parsed.goal === '') return { kind: 'error', text: `Usage: /${AGENT_TEAMS_COMMAND} [--profile <name>] <goal>` }
         invocation.agent.followup(createUserMessage({ content: [{ type: 'text', text: `/${AGENT_TEAMS_COMMAND}${invocation.rawInput}` }], source: { kind: 'user' } }))
-        return { kind: 'success', text: `AgentTeams activated${parsed.profile === undefined ? '' : ` with profile ${parsed.profile}`} — the captain will assemble the team.` }
+        return { kind: 'success', text: `AgentTeams 已激活${parsed.profile === undefined ? '' : `（profile ${parsed.profile}）`} —— 队长会开始组建团队。` }
       },
     }))
     for (const profileName of Object.keys(getProfiles())) {
@@ -104,13 +104,13 @@ export function registerAgentTeamsCommand(ctx: Context, getProfiles: () => Recor
       if (commandName === undefined) continue
       dispose.push(ctx.commands.register({
         name: commandName,
-        description: `run a goal with the AgentTeams ${profileName} profile`,
+        description: `用 AgentTeams 的 ${profileName} profile 执行目标`,
         input: { hint: '<goal>' },
         handler(invocation: CommandInvocation): CommandResult {
           const profile = profileForCommand(commandName, getProfiles())
           if (profile === undefined) return { kind: 'error', text: `AgentTeams profile command "/${commandName}" is unavailable` }
           invocation.agent.followup(createUserMessage({ content: [{ type: 'text', text: `/${commandName}${invocation.rawInput}` }], source: { kind: 'user' } }))
-          return { kind: 'success', text: `AgentTeams activated with profile ${profile} — the captain will assemble the team.` }
+          return { kind: 'success', text: `AgentTeams 已激活（profile ${profile}）—— 队长会开始组建团队。` }
         },
       }))
     }
