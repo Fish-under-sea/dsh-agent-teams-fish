@@ -356,6 +356,11 @@ const canonicalRoster = [
   ['Data', 'Data Analyst'],
   ['Operator', 'Release Operator'],
 ]
+// 角色表自 0.1.27 起分两半：上面 8 个**有美术**的岗位，以及这些**已登记、美术尚未
+// 出图**的桶（见 src/artwork-source.ts 的注释：命中后沿 vendor / team-lead 兜底，
+// 不会 404）。它们不是「第八个岗位映射缺失」，所以不能算进 8 人名单，但必须仍然
+// 出现在角色表里、且确实能落到兜底图。
+const ART_PENDING_ROLES = ['audio', 'video']
 const artworkReachesPackage = url => {
   const slug = typeof url === 'string' && url.startsWith(ART_BASE) ? url.slice(ART_BASE.length) : ''
   return slug !== '' && artworkCandidates(slug).some(candidate => packagedArtwork.includes(candidate))
@@ -365,9 +370,14 @@ check(
   JSON.stringify([...PACKAGED_ARTWORK_SLUGS].sort()) === JSON.stringify(expectedArtwork)
     && expectedArtwork.every(name => artworkCandidates(name)[0] === name
       && artworkReachesPackage(`${ART_BASE}${name}`))
-    && ARTWORK_ROLES.length === 8
-    && ARTWORK_ROLES.every(role =>
-      canonicalRoster.some(([name, memberRole]) => memberRoleSlug(name, memberRole) === role))
+    && ARTWORK_ROLES.length === canonicalRoster.length + ART_PENDING_ROLES.length
+    && canonicalRoster.every(([name, memberRole]) => ARTWORK_ROLES.includes(memberRoleSlug(name, memberRole)))
+    && ART_PENDING_ROLES.every(role => ARTWORK_ROLES.includes(role)
+      // 这些桶的图**确实不存在**：候选链是 member-<vendor>-<role> → member-<role>
+      // → member-<vendor>，三张都没有打包（客户端取图失败时会退回首字母徽标，不会
+      // 破图）。所以这里只断言「已登记」+「请求是被允许的 slug」，不能要求它落到
+      // 包内某张图 —— 那是 8 个有美术的岗位才有的保证。
+      && isAllowedArtwork(memberArtUrl('Engineer', role, 'deepseek').slice(ART_BASE.length)))
     && canonicalRoster.every(([name, role]) => memberRoleSlug(name, role) !== null
       && artworkReachesPackage(memberArtUrl(name, role))
       && artworkReachesPackage(memberArtUrl(name, role, 'deepseek')))
