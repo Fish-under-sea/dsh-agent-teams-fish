@@ -39,13 +39,13 @@
     "email": "relakkes@gmail.com",
     "url": "https://github.com/NanmiCoder"
   },
-  "homepage": "https://github.com/Fish-under-sea/dsh-agent-teams-src#readme",
+  "homepage": "https://github.com/Fish-under-sea/dsh-agent-teams-fish#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Fish-under-sea/dsh-agent-teams-src.git"
+    "url": "git+https://github.com/Fish-under-sea/dsh-agent-teams-fish.git"
   },
   "bugs": {
-    "url": "https://github.com/Fish-under-sea/dsh-agent-teams-src/issues"
+    "url": "https://github.com/Fish-under-sea/dsh-agent-teams-fish/issues"
   },
   "keywords": [
     "dsh",

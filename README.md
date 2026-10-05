@@ -7,7 +7,7 @@
 
 <div align="center">
 
-# dsh-agent-teams-src
+# dsh-agent-teams-fish
 
 **AgentTeams 插件的补充版 —— 让团队头像跟着「哪家模型」走**
 
@@ -151,7 +151,7 @@ Copy-Item .\assets\* "<DSH_HOME>\profiles\<profile>\node_modules\@nanmicoder\dsh
 ```jsonc
 // profiles/<profile>/package.json
 "dependencies": {
-  "dsh-agent-teams-fish": "github:Fish-under-sea/dsh-agent-teams-src"
+  "dsh-agent-teams-fish": "github:Fish-under-sea/dsh-agent-teams-fish"
 }
 ```
 
@@ -193,7 +193,7 @@ pnpm exec node --test scripts/custom-artwork.test.mjs   # 16 条路由链单测
 ## 📁 目录结构
 
 ```text
-dsh-agent-teams-src/
+dsh-agent-teams-fish/
 ├── src/
 │   ├── index.ts                         插件入口：artworkDir 配置、资产路由、no-store 策略
 │   ├── artwork-source.ts                【本版新增】slug 语法、降级链、自定义目录查找

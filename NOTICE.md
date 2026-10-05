@@ -15,7 +15,7 @@
 | 许可证 | **MIT** |
 | 本版基线 | 上游 tag **v0.1.22**（commit `9cba4fe`） |
 
-## 本版（Fish-under-sea/dsh-agent-teams-src）做了什么
+## 本版（Fish-under-sea/dsh-agent-teams-fish）做了什么
 
 只做**增量补充**，未改动上游的团队协作逻辑（花名册、任务 DAG、调度、质量门、信箱、面板主体交互）：
 

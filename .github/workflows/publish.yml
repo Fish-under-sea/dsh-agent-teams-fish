@@ -22,11 +22,11 @@ concurrency:
 
 jobs:
   verify:
-    if: github.repository == 'Fish-under-sea/dsh-agent-teams-src'
+    if: github.repository == 'Fish-under-sea/dsh-agent-teams-fish'
     uses: ./.github/workflows/verify.yml
 
   publish:
-    if: github.repository == 'Fish-under-sea/dsh-agent-teams-src'
+    if: github.repository == 'Fish-under-sea/dsh-agent-teams-fish'
     needs: verify
     runs-on: ubuntu-latest
     permissions:
