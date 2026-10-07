@@ -311,10 +311,21 @@ const expectedArtwork = [
 ].sort()
 const artworkDir = new URL('../assets/agent-teams/', import.meta.url)
 const packagedArtwork = (await readdir(artworkDir)).sort()
+const packagedArtworkSet = new Set(packagedArtwork)
+// 0.3.1：厂商美术随包分发，所以目录不再要求「恰好等于」那 15 个内置名字 ——
+// 否则每补一个厂商都要改这条门禁，且改法本身就是「把契约放松成什么都行」。
+// 取而代之的是两条更严的边界：内置 15 张必须仍在场（基线不被替换掉），
+// 以及目录只接纳已知美术族（.md、1×1 占位图、临时文件混入当场失败）。
 check(
-  'artwork directory contains exactly the V2 captain, eight members, and six actions',
-  JSON.stringify(packagedArtwork) === JSON.stringify(expectedArtwork),
-  `artwork = ${JSON.stringify(packagedArtwork)}`,
+  'artwork directory still ships the V2 captain, eight members, and six actions',
+  expectedArtwork.every(name => packagedArtworkSet.has(name)),
+  `missing = ${JSON.stringify(expectedArtwork.filter(name => !packagedArtworkSet.has(name)))}`,
+)
+const packagedArtworkName = /^(?:team-lead(?:-(?:deepseek|qwen|glm|kimi|claude|gemini|grok|gpt|hunyuan))?-v2\.png|member-(?:(?:deepseek|qwen|glm|kimi|claude|gemini|grok|gpt|hunyuan)-)?(?:engineer|qa|security|researcher|designer|docs|data|operator)-v2\.png|member-(?:deepseek|qwen|glm|kimi|claude|gemini|grok|gpt|hunyuan)-(?:full-)?v2\.png|action-(?:working|thinking|reporting|celebrating|sleeping|sending)-v2\.png|brand-(?:deepseek|qwen|glm|kimi|claude|gemini|grok|gpt|hunyuan)\.svg)$/u
+check(
+  'packaged artwork admits only the captain, member, action, and brand families',
+  packagedArtwork.every(name => packagedArtworkName.test(name)),
+  `foreign = ${JSON.stringify(packagedArtwork.filter(name => !packagedArtworkName.test(name)))}`,
 )
 const artworkHeaders = await Promise.all(expectedArtwork.map(async (name) => {
   const data = await readFile(new URL(name, artworkDir))
@@ -388,6 +399,87 @@ check(
     && artworkReachesPackage(LEAD_ART)
     && artworkReachesPackage(LEAD_FULL_ART),
   'a packaged image is unreachable or one of the eighth-member mappings is missing',
+)
+// 厂商美术的缺失会被降级链掩盖：包里只留岗位通用图时，`vendor+role` 请求照样
+// 「成功」——artworkCandidates 的第二跳命中内置鲸鱼——事故在门禁上完全隐形。
+// 这里钉住**第一跳**：9 厂商 × 8 岗位 + 通用 + 立绘 + 队长 + 商标都必须随包，
+// 并且 URL 模板 → 候选 → 目录三者指向同一个文件。
+const packagedVendorArtwork = ARTWORK_VENDORS.flatMap(vendor => [
+  ...ARTWORK_ROLES
+    .filter(role => !ART_PENDING_ROLES.includes(role))
+    .map(role => `member-${vendor}-${role}-v2.png`),
+  `member-${vendor}-v2.png`,
+  `member-${vendor}-full-v2.png`,
+  `team-lead-${vendor}-v2.png`,
+  `brand-${vendor}.svg`,
+])
+check(
+  'every vendor ships its full artwork set inside the bundle',
+  packagedVendorArtwork.every(name => packagedArtworkSet.has(name)),
+  `missing = ${JSON.stringify(packagedVendorArtwork.filter(name => !packagedArtworkSet.has(name)))}`,
+)
+check(
+  'a vendor+role request reaches its own artwork on the first hop',
+  ARTWORK_VENDORS.every(vendor => canonicalRoster.every(([name, role]) => {
+    const [first] = artworkCandidates(memberArtUrl(name, role, vendor).slice(ART_BASE.length))
+    return first === `member-${vendor}-${memberRoleSlug(name, role)}-v2.png` && packagedArtworkSet.has(first)
+  })),
+  'the vendor namespace degraded to the packaged whale or a role-generic image',
+)
+const artworkHeader = async (name) => {
+  try {
+    const data = await readFile(new URL(name, artworkDir))
+    return {
+      name,
+      png: data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])),
+      width: data.readUInt32BE(16),
+      height: data.readUInt32BE(20),
+      bitDepth: data[24],
+      colorType: data[25],
+    }
+  }
+  catch {
+    return { name, png: false, width: 0, height: 0, bitDepth: 0, colorType: 0 }
+  }
+}
+// 岗位/通用/队长图是 40–44px 头像，立绘放大到 512 供点击预览；尺寸写错不会破图，
+// 只会让某一侧变形，所以尺寸和透明度一起随包断言。
+const vendorArtworkSizes = ARTWORK_VENDORS.flatMap(vendor => [
+  ...ARTWORK_ROLES
+    .filter(role => !ART_PENDING_ROLES.includes(role))
+    .map(role => [`member-${vendor}-${role}-v2.png`, 256]),
+  [`member-${vendor}-v2.png`, 256],
+  [`team-lead-${vendor}-v2.png`, 256],
+  [`member-${vendor}-full-v2.png`, 512],
+])
+const vendorArtworkHeaders = await Promise.all(vendorArtworkSizes.map(([name]) => artworkHeader(name)))
+const offSpecArtwork = vendorArtworkHeaders.filter((image, index) => !image.png
+  || image.width !== vendorArtworkSizes[index][1]
+  || image.height !== vendorArtworkSizes[index][1]
+  || image.bitDepth !== 8
+  || image.colorType !== 6)
+check(
+  'vendor artwork is a square 8-bit RGBA PNG at its contracted size',
+  offSpecArtwork.length === 0,
+  `off spec = ${JSON.stringify(offSpecArtwork)}`,
+)
+const brandArtwork = await Promise.all(ARTWORK_VENDORS.map(async vendor => {
+  const name = `brand-${vendor}.svg`
+  try {
+    return { name, source: await readFile(new URL(name, artworkDir), 'utf8') }
+  }
+  catch {
+    return { name, source: '' }
+  }
+}))
+const offSpecBrand = brandArtwork.filter(({ source }) => !/^\s*<svg[\s>]/u.test(source)
+  || !source.includes('</svg>')
+  // 商标徽标要能离线自洽：外链或脚本会让它依赖网络（或被注入内容）。
+  || /<script|href\s*=\s*["']?(?:https?:)?\/\//iu.test(source))
+check(
+  'every vendor brand mark is a self-contained svg',
+  offSpecBrand.length === 0,
+  `invalid = ${JSON.stringify(offSpecBrand.map(({ name }) => name))}`,
 )
 const eightRoleArtwork = canonicalRoster.map(([name, role]) => memberArtUrl(name, role))
 check(
