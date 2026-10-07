@@ -65,4 +65,23 @@ export interface Config {
 export declare const Config: z<Config>;
 /** The model-facing usage policy: when and how to drive AgentTeams. */
 export declare function usageSectionText(toolNames: string, profilesText?: string): string;
+/** One resolved artwork response: the bytes, their media type, and the cache policy. */
+export interface ResolvedArtwork {
+    data: Buffer;
+    contentType: string;
+    cacheControl: string;
+}
+/**
+ * Resolve one artwork request into the bytes and media type to serve.
+ *
+ * Extracted from the HTTP handler so the degradation chain, the media type and
+ * the cache policy stay assertable without a live web server.
+ * @param name - requested artwork slug; foreign or unknown names resolve to undefined.
+ * @param options - the bundled artwork directory plus the optional custom override.
+ * @returns the response to serve, or undefined when nothing matched.
+ */
+export declare function resolveArtwork(name: string, options: {
+    artDir: string;
+    customArtDir?: string;
+}): Promise<ResolvedArtwork | undefined>;
 export declare function apply(ctx: Context, config: Config): void;

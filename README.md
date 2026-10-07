@@ -63,7 +63,8 @@
 | 能力 | 说明 | 主要文件 |
 |------|------|---------|
 | 自定义美术目录 | 新增 `artworkDir` 配置。配置后自定义图片优先于随包素材；且**只放行已知文件名**（未知文件名、`..`、绝对路径一律 404） | `src/artwork-source.ts`〔新增〕· `src/index.ts` |
-| **厂商素材随包分发**（0.3.1） | 9 厂商 × 8 岗位、厂商通用图、立绘大图、队长立绘、商标 SVG **共 108 个文件进包**（约 8 MB），装完即有厂商头像，不再依赖某台机器上的外部目录 | `assets/agent-teams/` · `scripts/import-vendor-artwork.mjs`〔新增〕 |
+| **厂商素材随包分发**（[0.3.1](release-notes/v0.3.1.md)） |
+| **包内素材按扩展名给 MIME**（0.3.2） | 内置素材里也有 `brand-<vendor>.svg`；[0.3.1](release-notes/v0.3.1.md) 把包内素材一律当 `image/png` 发送，浏览器解码 SVG 失败后徽标静默回落成活动状态图 —— 现在按扩展名推断 | `src/artwork-source.ts` · `src/index.ts` | 9 厂商 × 8 岗位、厂商通用图、立绘大图、队长立绘、商标 SVG **共 108 个文件进包**（约 8 MB），装完即有厂商头像，不再依赖某台机器上的外部目录 | `assets/agent-teams/` · `scripts/import-vendor-artwork.mjs`〔新增〕 |
 | 厂商头像命名空间 | 头像名从「岗位」扩展为「厂商 + 岗位」：`member-<vendor>-<role>-v2.png`；识别不出厂商时自动回落到岗位通用图 | 同上 · `src/client/artwork.ts` |
 | 厂商识别 | 从成员的 `provider + model` 路由推断厂商 —— `bailian` 一家同时供 qwen 与 deepseek，所以**以 model 为准** | `src/client/artwork.ts` |
 | 厂商商标徽标 | 头像右下角 22px 徽标从「活动状态图」换成「厂商商标 SVG」（`brand-<vendor>.svg`）；文件缺失时 `onError` 自动换回活动图，**不会破图** | 同上 · `ActivityPanel.tsx` · `ActivityPanel.module.css` |
@@ -90,7 +91,7 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 
 ```jsonc
 "dependencies": {
-  "dsh-agent-teams-fish": "^0.3.1"
+  "dsh-agent-teams-fish": "^0.3.2"
 }
 ```
 
@@ -138,7 +139,7 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 | `artworkDir` | **可选**：自定义美术素材目录的绝对路径；配了就整套覆盖随包素材（含厂商图） | 无（用包内素材） |
 
 > 配置目录**只在启动时读一次**；之后换图不用重启（自定义图片走 `no-store`）。
-> ⚠️ `artworkDir` 是**本机绝对路径**：换机器或换用户名后它不再成立，插件会静默回落到随包素材。0.3.1 之前包里没有厂商图，这次回落就表现为「整队变回内置鲸鱼头像」；现在包里自带厂商素材，跨机器不需要再配它。
+> ⚠️ `artworkDir` 是**本机绝对路径**：换机器或换用户名后它不再成立，插件会静默回落到随包素材。[0.3.1](release-notes/v0.3.1.md) 之前包里没有厂商图，这次回落就表现为「整队变回内置鲸鱼头像」；现在包里自带厂商素材，跨机器不需要再配它。
 
 ## 美术系统
 
@@ -158,7 +159,7 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 - **岗位 token（8）**：`engineer` `qa` `security` `researcher` `designer` `docs` `data` `operator`（队长单列）
 - 自定义目录里的文件名可省略 `-v2`；扩展名优先级 `.png` `.webp` `.jpg` `.jpeg` `.gif` `.svg`
 
-### 随包素材（0.3.1 起）
+### 随包素材（[0.3.1](release-notes/v0.3.1.md) 起）
 
 `assets/agent-teams/` 共 **123 个文件**：15 张内置鲸鱼基线（队长 / 8 岗位 / 6 动作）+ 108 张厂商素材。
 
@@ -176,9 +177,9 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 
 ```text
 请求 member-qwen-qa-v2.png
-  ├─ 1. member-qwen-qa-v2.png     厂商 + 岗位（0.3.1 起随包）
+  ├─ 1. member-qwen-qa-v2.png     厂商 + 岗位（随包）
   ├─ 2. member-qa-v2.png          岗位通用
-  ├─ 3. member-qwen-v2.png        厂商通用（0.3.1 起随包）
+  ├─ 3. member-qwen-v2.png        厂商通用（随包）
   └─ 4. 内置鲸鱼素材
 ```
 
@@ -235,7 +236,7 @@ dsh-agent-teams-fish/
 │       └── locales.ts                   中英文案（含中文岗位名）
 ├── scripts/
 │   ├── custom-artwork.test.mjs          【本版新增】16 条路由链单测
-│   └── import-vendor-artwork.mjs        【0.3.1 新增】厂商素材导入（补 -v2 后缀，跳过占位图）
+│   └── import-vendor-artwork.mjs        【随包新增】厂商素材导入（补 -v2 后缀，跳过占位图）
 ├── lib/                                 构建产物（随仓库跟踪，DSH 实际加载的就是它）
 ├── assets/                              素材（15 张内置鲸鱼图 + 108 张厂商素材 + readme/hero.svg）
 ├── README.md                            本文件（本版重写）
@@ -252,9 +253,10 @@ dsh-agent-teams-fish/
 |----|---------|
 | **队长不跟随模型路由** | 面板快照（`TeamActivitySnapshot`）里只有成员的 `provider/model`，没有队长的；宿主能取到队长路由但没进快照。所以队长用文件覆盖，想自动跟随需给快照加字段 |
 | **打包同名 URL 会被浏览器缓存 24h** | 打包图带 `max-age=86400`：某 URL 先请求过一次打包图，之后再放自定义文件，浏览器 24h 内不会重新请求，看着就像「改了没生效」（队长真踩过）。现已双重规避：队长改请求**全新 URL** + 配了目录就一律 `no-store` |
-| **内置同名文件的硬刷新例外仍在** | 替换「同时也随插件发布」的文件名（`team-lead-v2.png`、`member-<role>-v2.png`、`action-*.png`）第一次需 `Ctrl+Shift+R` 挤掉旧缓存。厂商命名空间（`member-<vendor>-*-v2.png`、`brand-<vendor>.svg`）是 0.3.1 才进包的新 URL，浏览器从没见过，不受这段缓存影响 |
-| **美术素材随包分发（0.3.1 起）** | 108 个文件进了 `assets/agent-teams/`，npm 包因此增大约 8 MB。角色图是各家角色的 AI 二次创作、商标是各厂商商标，**版权归各厂商**，随包分发**仅供个人学习与本地使用**；商用或再分发请自行评估（详见 [`NOTICE.md`](NOTICE.md)）。想整套换画风仍可用 `artworkDir` 覆盖 |
-| **`artworkDir` 不可移植** | 它是本机绝对路径，且插件按进程工作目录解析。换机器后若目录不存在，查找链直接落到随包素材 —— 0.3.1 之前这一步就是「厂商头像集体消失」的现场 |
+| **内置同名文件的硬刷新例外仍在** | 替换「同时也随插件发布」的文件名（`team-lead-v2.png`、`member-<role>-v2.png`、`action-*.png`）第一次需 `Ctrl+Shift+R` 挤掉旧缓存。厂商命名空间（`member-<vendor>-*-v2.png`、`brand-<vendor>.svg`）是 [0.3.1](release-notes/v0.3.1.md) 才进包的新 URL，浏览器从没见过，不受这段缓存影响 |
+| **美术素材随包分发（[0.3.1](release-notes/v0.3.1.md) 起）** |
+| **徽标的媒体类型（0.3.2 修）** | 内置素材里同样有 SVG，但 [0.3.1](release-notes/v0.3.1.md) 的宿主端把**包内**素材一律当 `image/png` 发送 → 浏览器解码失败 → 徽标 `onError` 回落活动图，看起来就像「SVG 没进包」；配了 `artworkDir` 的机器不受影响（那条分支本来就按扩展名推断）。现在两条路径共用同一张扩展名表，并有门禁断言要求每个 `brand-<vendor>.svg` 以 `image/svg+xml` 送达 | 108 个文件进了 `assets/agent-teams/`，npm 包因此增大约 8 MB。角色图是各家角色的 AI 二次创作、商标是各厂商商标，**版权归各厂商**，随包分发**仅供个人学习与本地使用**；商用或再分发请自行评估（详见 [`NOTICE.md`](NOTICE.md)）。想整套换画风仍可用 `artworkDir` 覆盖 |
+| **`artworkDir` 不可移植** | 它是本机绝对路径，且插件按进程工作目录解析。换机器后若目录不存在，查找链直接落到随包素材 —— [0.3.1](release-notes/v0.3.1.md) 之前这一步就是「厂商头像集体消失」的现场 |
 | **`lib/` 是构建产物** | 与上游一致随仓库跟踪（便于 GitHub 直装），所以一次构建的 diff 较大。`package.json` 只改身份字段：包名换成 `dsh-agent-teams-fish`、`repository`/`homepage`/`bugs` 指向本仓库，**版本与 `author` 保持上游不变**；改名会牵动插件行与客户端注册名，装机时 profile 要同步改 |
 | **未跑上游发布校验** | 上游 `verify:release` / `verify:compatibility` 等脚本校验的是上游仓库元数据，本版未逐一执行 |
 | **工具链坑** | 本环境下 `& "DSH Desktop Beta.exe" script.mjs`（`ELECTRON_RUN_AS_NODE=1`）**不阻塞**：它写出的文件可能落在后续命令之后。把「归一化 → 复制 → 渲染」串起来时必须显式等待，否则会读到旧副本 |
