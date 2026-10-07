@@ -311,6 +311,10 @@ const expectedArtwork = [
   'action-sleeping-v2.png', 'action-sending-v2.png',
 ].sort()
 const artworkDir = new URL('../assets/agent-teams/', import.meta.url)
+// 2026-10-08：厂商命名空间扩到 15 个、audio/video 两桶出图，所以这条门禁的
+// 厂商与岗位枚举各收敛成一份，跟着 ARTWORK_VENDORS / ARTWORK_ROLES 一起改。
+const ARTWORK_VENDOR_ALT = 'deepseek|qwen|glm|kimi|claude|gemini|grok|gpt|hunyuan|minimax|meta|mistral|rwkv|seed|ernie'
+const ARTWORK_ROLE_ALT = 'engineer|qa|security|researcher|designer|docs|data|operator|audio|video'
 const packagedArtwork = (await readdir(artworkDir)).sort()
 const packagedArtworkSet = new Set(packagedArtwork)
 // 0.3.1：厂商美术随包分发，所以目录不再要求「恰好等于」那 15 个内置名字 ——
@@ -322,7 +326,20 @@ check(
   expectedArtwork.every(name => packagedArtworkSet.has(name)),
   `missing = ${JSON.stringify(expectedArtwork.filter(name => !packagedArtworkSet.has(name)))}`,
 )
-const packagedArtworkName = /^(?:team-lead(?:-(?:deepseek|qwen|glm|kimi|claude|gemini|grok|gpt|hunyuan))?-v2\.png|member-(?:(?:deepseek|qwen|glm|kimi|claude|gemini|grok|gpt|hunyuan)-)?(?:engineer|qa|security|researcher|designer|docs|data|operator)-v2\.png|member-(?:deepseek|qwen|glm|kimi|claude|gemini|grok|gpt|hunyuan)-(?:full-)?v2\.png|action-(?:working|thinking|reporting|celebrating|sleeping|sending)-v2\.png|brand-(?:deepseek|qwen|glm|kimi|claude|gemini|grok|gpt|hunyuan)\.svg)$/u
+const packagedArtworkName = new RegExp(
+  '^(?:'
+  // 15 个厂商 token 与 10 个岗位 token 各只写一份，避免四处枚举漂移。
+  + `team-lead(?:-(?:${ARTWORK_VENDOR_ALT}))?-v2\\.png`
+  // 2026-10-08 起：点击放大的高清族是 WebP（同分辨率下体积约为 PNG 的十分之一）。
+  // 岗位/队长高清是 1024×1024 方框，厂商立绘高清按长边 2048 紧裁（非方形）。
+  + `|team-lead(?:-(?:${ARTWORK_VENDOR_ALT}))?-full-v2\\.webp`
+  + `|member-(?:(?:${ARTWORK_VENDOR_ALT})-)?(?:${ARTWORK_ROLE_ALT})-v2\\.png`
+  + `|member-(?:(?:${ARTWORK_VENDOR_ALT})-)?(?:${ARTWORK_ROLE_ALT})-full-v2\\.webp`
+  + `|member-(?:${ARTWORK_VENDOR_ALT})-v2\\.png`
+  + `|member-(?:${ARTWORK_VENDOR_ALT})-full-v2\\.webp`
+  + '|action-(?:working|thinking|reporting|celebrating|sleeping|sending)-v2\\.png'
+  + `|brand-(?:${ARTWORK_VENDOR_ALT})\\.svg`
+  + ')$', 'u')
 check(
   'packaged artwork admits only the captain, member, action, and brand families',
   packagedArtwork.every(name => packagedArtworkName.test(name)),
@@ -368,11 +385,13 @@ const canonicalRoster = [
   ['Data', 'Data Analyst'],
   ['Operator', 'Release Operator'],
 ]
-// 角色表自 0.1.27 起分两半：上面 8 个**有美术**的岗位，以及这些**已登记、美术尚未
-// 出图**的桶（见 src/artwork-source.ts 的注释：命中后沿 vendor / team-lead 兜底，
-// 不会 404）。它们不是「第八个岗位映射缺失」，所以不能算进 8 人名单，但必须仍然
-// 出现在角色表里、且确实能落到兜底图。
-const ART_PENDING_ROLES = ['audio', 'video']
+// 素材分两档（2026-10-08）：一档厂商有「厂商 × 岗位」全套图 + 队长图，另一档只有
+// 厂商通用图与 512 立绘。两档合起来必须恰好等于 ARTWORK_VENDORS，多一个少一个都失败。
+const ROLE_ART_VENDORS = ['deepseek', 'qwen', 'glm', 'kimi', 'claude', 'gemini', 'grok', 'gpt', 'hunyuan', 'minimax']
+const GENERIC_ONLY_VENDORS = ['meta', 'mistral', 'rwkv', 'seed', 'ernie']
+// 角色表自 0.1.27 起分两半：上面 8 个「八人名单」岗位，以及 audio / video —— 它们
+// 不在名单里，但同样登记在 ARTWORK_ROLES 且自 2026-10-08 起有整套厂商图。
+const EXTRA_ROLES = ['audio', 'video']
 const artworkReachesPackage = url => {
   const slug = typeof url === 'string' && url.startsWith(ART_BASE) ? url.slice(ART_BASE.length) : ''
   return slug !== '' && artworkCandidates(slug).some(candidate => packagedArtwork.includes(candidate))
@@ -382,18 +401,19 @@ check(
   JSON.stringify([...PACKAGED_ARTWORK_SLUGS].sort()) === JSON.stringify(expectedArtwork)
     && expectedArtwork.every(name => artworkCandidates(name)[0] === name
       && artworkReachesPackage(`${ART_BASE}${name}`))
-    && ARTWORK_ROLES.length === canonicalRoster.length + ART_PENDING_ROLES.length
+    && ARTWORK_ROLES.length === canonicalRoster.length + EXTRA_ROLES.length
     && canonicalRoster.every(([name, memberRole]) => ARTWORK_ROLES.includes(memberRoleSlug(name, memberRole)))
-    && ART_PENDING_ROLES.every(role => ARTWORK_ROLES.includes(role)
-      // 这些桶的图**确实不存在**：候选链是 member-<vendor>-<role> → member-<role>
-      // → member-<vendor>，三张都没有打包（客户端取图失败时会退回首字母徽标，不会
-      // 破图）。所以这里只断言「已登记」+「请求是被允许的 slug」，不能要求它落到
-      // 包内某张图 —— 那是 8 个有美术的岗位才有的保证。
-      && isAllowedArtwork(memberArtUrl('Engineer', role, 'deepseek').slice(ART_BASE.length)))
+    && EXTRA_ROLES.every(role => ARTWORK_ROLES.includes(role)
+      // audio / video 不在八人名单里，但自 2026-10-08 起同样有整套厂商图：既要
+      // 「已登记 + 请求是被允许的 slug」，也要在角色图厂商档里真的落到岗位上。
+      && isAllowedArtwork(memberArtUrl('Engineer', role, 'deepseek').slice(ART_BASE.length))
+      && ROLE_ART_VENDORS.every(vendor => packagedArtworkSet.has(`member-${vendor}-${role}-v2.png`)))
     && canonicalRoster.every(([name, role]) => memberRoleSlug(name, role) !== null
       && artworkReachesPackage(memberArtUrl(name, role))
       && artworkReachesPackage(memberArtUrl(name, role, 'deepseek')))
-    && ARTWORK_VENDORS.length === 9
+    && ARTWORK_VENDORS.length === 15
+    && [...ROLE_ART_VENDORS, ...GENERIC_ONLY_VENDORS].sort().join('|')
+      === [...ARTWORK_VENDORS].sort().join('|')
     && ARTWORK_VENDORS.every(vendor => vendorSlug({ model: vendor }) === vendor
       && isAllowedArtwork(`brand-${vendor}.svg`)
       && canonicalRoster.every(([name, role]) => artworkReachesPackage(memberArtUrl(name, role, vendor))))
@@ -403,25 +423,29 @@ check(
 )
 // 厂商美术的缺失会被降级链掩盖：包里只留岗位通用图时，`vendor+role` 请求照样
 // 「成功」——artworkCandidates 的第二跳命中内置鲸鱼——事故在门禁上完全隐形。
-// 这里钉住**第一跳**：9 厂商 × 8 岗位 + 通用 + 立绘 + 队长 + 商标都必须随包，
-// 并且 URL 模板 → 候选 → 目录三者指向同一个文件。
-const packagedVendorArtwork = ARTWORK_VENDORS.flatMap(vendor => [
-  ...ARTWORK_ROLES
-    .filter(role => !ART_PENDING_ROLES.includes(role))
-    .map(role => `member-${vendor}-${role}-v2.png`),
-  `member-${vendor}-v2.png`,
-  `member-${vendor}-full-v2.png`,
-  `team-lead-${vendor}-v2.png`,
-  `brand-${vendor}.svg`,
-])
+// 这里钉住**第一跳**：角色图厂商必须是 10 岗位全套（头像 PNG + 高清 WebP）+ 队长
+// （头像 + 高清）+ 通用 + 立绘高清 + 商标都在包里，只有通用图的厂商则至少要通用 +
+// 立绘高清 + 商标，并且 URL 模板 → 候选 → 目录指向同一个文件。
+const packagedVendorArtwork = [
+  ...ROLE_ART_VENDORS.flatMap(vendor => [
+    ...ARTWORK_ROLES.flatMap(role => [`member-${vendor}-${role}-v2.png`, `member-${vendor}-${role}-full-v2.webp`]),
+    `team-lead-${vendor}-v2.png`,
+    `team-lead-${vendor}-full-v2.webp`,
+  ]),
+  ...ARTWORK_VENDORS.flatMap(vendor => [
+    `member-${vendor}-v2.png`,
+    `member-${vendor}-full-v2.webp`,
+    `brand-${vendor}.svg`,
+  ]),
+]
 check(
-  'every vendor ships its full artwork set inside the bundle',
+  'every vendor ships its own artwork tier inside the bundle',
   packagedVendorArtwork.every(name => packagedArtworkSet.has(name)),
   `missing = ${JSON.stringify(packagedVendorArtwork.filter(name => !packagedArtworkSet.has(name)))}`,
 )
 check(
   'a vendor+role request reaches its own artwork on the first hop',
-  ARTWORK_VENDORS.every(vendor => canonicalRoster.every(([name, role]) => {
+  ROLE_ART_VENDORS.every(vendor => canonicalRoster.every(([name, role]) => {
     const [first] = artworkCandidates(memberArtUrl(name, role, vendor).slice(ART_BASE.length))
     return first === `member-${vendor}-${memberRoleSlug(name, role)}-v2.png` && packagedArtworkSet.has(first)
   })),
@@ -443,26 +467,81 @@ const artworkHeader = async (name) => {
     return { name, png: false, width: 0, height: 0, bitDepth: 0, colorType: 0 }
   }
 }
-// 岗位/通用/队长图是 40–44px 头像，立绘放大到 512 供点击预览；尺寸写错不会破图，
-// 只会让某一侧变形，所以尺寸和透明度一起随包断言。
-const vendorArtworkSizes = ARTWORK_VENDORS.flatMap(vendor => [
-  ...ARTWORK_ROLES
-    .filter(role => !ART_PENDING_ROLES.includes(role))
-    .map(role => [`member-${vendor}-${role}-v2.png`, 256]),
-  [`member-${vendor}-v2.png`, 256],
-  [`team-lead-${vendor}-v2.png`, 256],
-  [`member-${vendor}-full-v2.png`, 512],
-])
-const vendorArtworkHeaders = await Promise.all(vendorArtworkSizes.map(([name]) => artworkHeader(name)))
-const offSpecArtwork = vendorArtworkHeaders.filter((image, index) => !image.png
-  || image.width !== vendorArtworkSizes[index][1]
-  || image.height !== vendorArtworkSizes[index][1]
+/** 读 WebP 容器头（VP8X 扩展格式带 alpha 标志；无扩展头时退回 VP8/VP8L 帧头）。 */
+const webpHeader = async (name) => {
+  try {
+    const data = await readFile(new URL(name, artworkDir))
+    const riff = data.subarray(0, 4).toString('latin1') === 'RIFF'
+      && data.subarray(8, 12).toString('latin1') === 'WEBP'
+    if (!riff) return { name, webp: false, width: 0, height: 0, alpha: false }
+    let offset = 12
+    while (offset + 8 <= data.length) {
+      const type = data.toString('latin1', offset, offset + 4)
+      const size = data.readUInt32LE(offset + 4)
+      const body = offset + 8
+      if (type === 'VP8X') {
+        return {
+          name,
+          webp: true,
+          width: (data[body + 4] | (data[body + 5] << 8) | (data[body + 6] << 16)) + 1,
+          height: (data[body + 7] | (data[body + 8] << 8) | (data[body + 9] << 16)) + 1,
+          alpha: (data[body] & 0x10) !== 0,
+        }
+      }
+      if (type === 'VP8 ') {
+        return { name, webp: true, width: data.readUInt16LE(body + 6) & 0x3fff, height: data.readUInt16LE(body + 8) & 0x3fff, alpha: false }
+      }
+      if (type === 'VP8L') {
+        const bits = data.readUInt32LE(body + 1)
+        return { name, webp: true, width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1, alpha: ((bits >> 28) & 1) === 1 }
+      }
+      offset = body + size + (size % 2)
+    }
+    return { name, webp: false, width: 0, height: 0, alpha: false }
+  }
+  catch {
+    return { name, webp: false, width: 0, height: 0, alpha: false }
+  }
+}
+// 头像族是 40–44px 的 256×256 8-bit RGBA PNG；高清族是 WebP —— 岗位/队长为 1024×1024
+// 方框（画面 1:1 原生像素居中），厂商立绘按长边不超过 2048 紧裁、因此是竖幅而非方形。
+// 尺寸写错不会破图，只会让某一侧变形，所以两族都随包断言。
+const vendorAvatarNames = [
+  ...ROLE_ART_VENDORS.flatMap(vendor => [
+    ...ARTWORK_ROLES.map(role => `member-${vendor}-${role}-v2.png`),
+    `team-lead-${vendor}-v2.png`,
+  ]),
+  ...ARTWORK_VENDORS.map(vendor => `member-${vendor}-v2.png`),
+]
+const offSpecAvatars = (await Promise.all(vendorAvatarNames.map(artworkHeader))).filter(image => !image.png
+  || image.width !== 256
+  || image.height !== 256
   || image.bitDepth !== 8
   || image.colorType !== 6)
 check(
-  'vendor artwork is a square 8-bit RGBA PNG at its contracted size',
-  offSpecArtwork.length === 0,
-  `off spec = ${JSON.stringify(offSpecArtwork)}`,
+  'vendor avatar artwork is a 256x256 8-bit RGBA PNG',
+  offSpecAvatars.length === 0,
+  `off spec = ${JSON.stringify(offSpecAvatars)}`,
+)
+const vendorHdNames = [
+  ...ROLE_ART_VENDORS.flatMap(vendor => [
+    ...ARTWORK_ROLES.map(role => [`member-${vendor}-${role}-full-v2.webp`, 'square']),
+    [`team-lead-${vendor}-full-v2.webp`, 'square'],
+  ]),
+  ...ARTWORK_VENDORS.map(vendor => [`member-${vendor}-full-v2.webp`, 'portrait']),
+]
+const hdHeaders = await Promise.all(vendorHdNames.map(([name]) => webpHeader(name)))
+const offSpecHd = hdHeaders.filter((image, index) => {
+  const [, shape] = vendorHdNames[index]
+  if (!image.webp || !image.alpha) return true
+  // 岗位/队长固定 1024×1024；厂商立绘是竖幅，长边不得超过 2048（且必须真的到了高清量级）。
+  if (shape === 'square') return image.width !== 1024 || image.height !== 1024
+  return image.height <= image.width || image.height > 2048 || image.height < 1024
+})
+check(
+  'vendor HD preview artwork is an alpha WebP at its contracted size',
+  offSpecHd.length === 0,
+  `off spec = ${JSON.stringify(offSpecHd)}`,
 )
 const brandArtwork = await Promise.all(ARTWORK_VENDORS.map(async vendor => {
   const name = `brand-${vendor}.svg`
@@ -486,20 +565,26 @@ check(
 // 给媒体类型。0.3.1 把包内素材一律当 image/png 发出去，浏览器解码 SVG 失败 →
 // 徽标 onError 回落活动状态图，看起来就像「SVG 根本没进包」。这里直接调真实
 // 解析函数（与 HTTP 处理器同一份代码），逐张比对媒体类型与字节数。
+// 2026-10-08：高清族随包的是 .webp，而客户端请求的永远是 .png 名字 —— 所以按
+// **请求名**解析，再与磁盘上的真身比对，正好一并验证「包内按扩展名探测」这件事。
 const { resolveArtwork } = await import('../lib/index.js')
 const packagedArtDir = fileURLToPath(artworkDir)
 const artworkResponses = []
 for (const name of packagedArtwork) {
-  const resolved = await resolveArtwork(name, { artDir: packagedArtDir })
+  const requested = name.endsWith('.webp') ? name.replace(/\.webp$/u, '.png') : name
+  const resolved = await resolveArtwork(requested, { artDir: packagedArtDir })
   artworkResponses.push({
     name,
+    requested,
     type: resolved?.contentType,
     bytes: resolved?.data.byteLength ?? 0,
     disk: (await readFile(new URL(name, artworkDir))).byteLength,
   })
 }
-const wrongArtworkType = artworkResponses.filter(entry => entry.type
-  !== (entry.name.endsWith('.svg') ? 'image/svg+xml' : 'image/png'))
+const declaredArtworkType = name => name.endsWith('.svg')
+  ? 'image/svg+xml'
+  : name.endsWith('.webp') ? 'image/webp' : 'image/png'
+const wrongArtworkType = artworkResponses.filter(entry => entry.type !== declaredArtworkType(entry.name))
 const mismatchedArtworkBytes = artworkResponses.filter(entry => entry.bytes !== entry.disk)
 check(
   'packaged artwork is served with the media type its own extension declares',

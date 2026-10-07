@@ -6,8 +6,10 @@ import { readdir, copyFile, mkdir, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const VENDORS = ['deepseek', 'qwen', 'glm', 'kimi', 'claude', 'gemini', 'grok', 'gpt', 'hunyuan'];
-const ROLES = ['engineer', 'qa', 'security', 'researcher', 'designer', 'docs', 'data', 'operator'];
+// 2026-10-08：厂商命名空间扩到 15 个（前 10 个有厂商 × 岗位图），岗位桶补上
+// audio / video —— 这两个桶已有 10 个厂商的岗位图，导入时不能再被判成「无法识别」。
+const VENDORS = ['deepseek', 'qwen', 'glm', 'kimi', 'claude', 'gemini', 'grok', 'gpt', 'hunyuan', 'minimax', 'meta', 'mistral', 'rwkv', 'seed', 'ernie'];
+const ROLES = ['engineer', 'qa', 'security', 'researcher', 'designer', 'docs', 'data', 'operator', 'audio', 'video'];
 const V = `(?:${VENDORS.join('|')})`;
 const RULES = [
   // 厂商 + 岗位、厂商通用、厂商立绘：补 -v2

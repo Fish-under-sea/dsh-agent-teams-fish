@@ -18,8 +18,10 @@ import {
   artworkCandidates,
   artworkStems,
   findCustomArtwork,
+  findPackagedArtwork,
   isAllowedArtwork,
   packagedArtworkContentType,
+  packagedArtworkNames,
 } from '../lib/artwork-source.js'
 
 const PNG = Buffer.from('89504e470d0a1a0a', 'hex')
@@ -37,15 +39,35 @@ test('every packaged slug stays servable exactly as shipped', () => {
   }
 })
 
-test('vendor namespaces cover the 9 vendors and 10 roles', () => {
-  assert.equal(ARTWORK_VENDORS.length, 9)
+test('vendor namespaces cover the 15 vendors and 10 roles', () => {
+  assert.equal(ARTWORK_VENDORS.length, 15)
   assert.equal(ARTWORK_ROLES.length, 10)
   assert.ok(ARTWORK_VENDORS.includes('deepseek'))
   assert.ok(ARTWORK_VENDORS.includes('hunyuan'))
+  // 2026-10-08：第二轮素材新增的 6 个厂商；前 10 个有厂商 × 岗位图，这 6 个里只有
+  // minimax 有，其余沿厂商通用图兜底。
+  for (const vendor of ['minimax', 'meta', 'mistral', 'rwkv', 'seed', 'ernie']) {
+    assert.ok(ARTWORK_VENDORS.includes(vendor), `${vendor} 必须在厂商表里`)
+  }
   assert.ok(ARTWORK_ROLES.includes('operator'))
-  // 2026-10-05：新增 audio / video 桶（美术尚未出图，命中后沿 vendor/team-lead 兜底）。
+  // 2026-10-05 登记、2026-10-08 出图：audio / video 已有 10 个厂商的岗位图。
   assert.ok(ARTWORK_ROLES.includes('audio'))
   assert.ok(ARTWORK_ROLES.includes('video'))
+})
+
+test('a brand request for a newly added vendor stays inside the family', () => {
+  assert.deepEqual(artworkCandidates('brand-minimax.svg'), [
+    'brand-minimax.svg',
+    'brand-minimax.png',
+    'brand.svg',
+    'brand.png',
+  ])
+  // 新厂商的岗位图缺失时只沿 vendor 兜底，不会退到别的厂商。
+  assert.deepEqual(artworkCandidates('member-ernie-engineer-v2.png'), [
+    'member-ernie-engineer-v2.png',
+    'member-engineer-v2.png',
+    'member-ernie-v2.png',
+  ])
 })
 
 test('a brand request lists the svg, its png sibling, then the family default', () => {
@@ -166,6 +188,41 @@ test('unknown slugs and missing directories fall back to packaged art', async ()
     assert.equal(await findCustomArtwork(dir, '../secret.png'), undefined)
     assert.equal(await findCustomArtwork(dir, 'member-deepseek-qa-v2.png'), undefined)
     assert.equal(await findCustomArtwork(join(dir, 'nope'), 'member-deepseek-qa-v2.png'), undefined)
+  } finally {
+    await done()
+  }
+})
+
+test('member/leader candidates probe every accepted extension inside the bundle', () => {
+  // 高清预览族随包的是 .webp，而客户端请求的永远是 .png 名字。
+  assert.deepEqual(packagedArtworkNames('member-deepseek-qa-full-v2.png').slice(0, 3), [
+    'member-deepseek-qa-full-v2.png',
+    'member-deepseek-qa-full-v2.webp',
+    'member-deepseek-qa-full-v2.jpg',
+  ])
+  assert.equal(packagedArtworkNames('member-deepseek-qa-full-v2.png').at(-1), 'member-deepseek-qa-full-v2.svg')
+  assert.deepEqual(packagedArtworkNames('team-lead-qwen-full-v2.png').slice(0, 2), [
+    'team-lead-qwen-full-v2.png',
+    'team-lead-qwen-full-v2.webp',
+  ])
+  // 商标与活动状态图保持严格候选名，避免改动它们既有的 .svg 优先顺序。
+  assert.deepEqual(packagedArtworkNames('brand-minimax.svg'), ['brand-minimax.svg'])
+  assert.deepEqual(packagedArtworkNames('brand.svg'), ['brand.svg'])
+  assert.deepEqual(packagedArtworkNames('action-working-v2.png'), ['action-working-v2.png'])
+})
+
+test('a packaged -full request answers the webp sibling with the webp media type', async () => {
+  const { dir, done } = await artDir()
+  try {
+    await writeFile(join(dir, 'member-deepseek-security-full-v2.webp'), Buffer.from('WEBP'))
+    const hit = await findPackagedArtwork(dir, 'member-deepseek-security-full-v2.png')
+    assert.equal(hit?.path, join(dir, 'member-deepseek-security-full-v2.webp'))
+    assert.equal(hit?.contentType, 'image/webp')
+    assert.deepEqual(hit?.data, Buffer.from('WEBP'))
+    // 同一 stem 的 .png 一旦存在仍然优先（头像族随包的就是 PNG）。
+    await writeFile(join(dir, 'member-deepseek-security-v2.png'), Buffer.from('PNG'))
+    assert.equal((await findPackagedArtwork(dir, 'member-deepseek-security-v2.png'))?.contentType, 'image/png')
+    assert.equal(await findPackagedArtwork(dir, 'member-deepseek-qa-v2.png'), undefined)
   } finally {
     await done()
   }

@@ -29,8 +29,8 @@ export declare const PACKAGED_ARTWORK_SLUGS: ReadonlyArray<string>;
  * @returns the media type for that extension, or `application/octet-stream`.
  */
 export declare function packagedArtworkContentType(slug: string): string;
-/** One custom artwork file that answers a requested slug. */
-export interface CustomArtwork {
+/** One artwork file on disk that answers a requested slug; packaged or custom. */
+export interface ArtworkFile {
     /** Absolute path the bytes were read from; reported in diagnostics. */
     path: string;
     /** Media type derived from the file extension. */
@@ -38,6 +38,8 @@ export interface CustomArtwork {
     /** File bytes. */
     data: Buffer;
 }
+/** Historical name of {@link ArtworkFile}, kept for the custom-directory call sites. */
+export type CustomArtwork = ArtworkFile;
 /**
  * Ordered lookup chain for one requested slug, most specific first:
  * `vendor+role` → `role` → `vendor` → `team-lead`. A `-full` request also
@@ -69,3 +71,12 @@ export declare function artworkStems(slug: string): ReadonlyArray<string>;
  * @returns the first matching file, or `undefined` to fall back to packaged art.
  */
 export declare function findCustomArtwork(dir: string, slug: string): Promise<CustomArtwork | undefined>;
+/** File names to probe for one packaged candidate, most preferred first. */
+export declare function packagedArtworkNames(candidate: string): ReadonlyArray<string>;
+/**
+ * Resolve one requested slug inside the packaged artwork directory.
+ * @param dir - absolute packaged artwork directory.
+ * @param slug - one candidate produced by {@link artworkCandidates}.
+ * @returns the first matching file with the media type of the file that matched.
+ */
+export declare function findPackagedArtwork(dir: string, slug: string): Promise<ArtworkFile | undefined>;

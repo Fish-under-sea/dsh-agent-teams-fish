@@ -33,7 +33,7 @@ const NEGATIVE_CASES = [
   'Loop Pad 触发、混音总线、录音导出',
 ]
 
-/** 本机白名单路由 + T1 别名：必须命中预期厂商，minimax-m3 保持未识别。 */
+/** 本机白名单路由 + T1 别名：必须命中预期厂商。 */
 const VENDOR_CASES = [
   { provider: 'bailian-he', model: 'qwen3.7-plus', expected: 'qwen' },
   { provider: 'bailian', model: 'qwen3.8-flash', expected: 'qwen' },
@@ -41,7 +41,7 @@ const VENDOR_CASES = [
   { provider: 'atria', model: 'glm-5.3', expected: 'glm' },
   { provider: 'bailian', model: 'kimi-k2.7-code', expected: 'kimi' },
   { provider: 'bailian', model: 'qwen3.8-max', expected: 'qwen' },
-  { provider: 'atria', model: 'minimax-m3', expected: undefined },
+  { provider: 'atria', model: 'minimax-m3', expected: 'minimax' },
   { provider: 'bailian', model: 'glm-5.3', expected: 'glm' },
   { provider: 'bailian-he', model: 'qwen3.6-plus', expected: 'qwen' },
   // T1 别名补充
@@ -51,6 +51,15 @@ const VENDOR_CASES = [
   { provider: 'openai', model: 'gpt-4o', expected: 'gpt' },
   { provider: 'xai', model: 'grok-3-beta', expected: 'grok' },
   { provider: 'google', model: 'gemini-2.5-pro', expected: 'gemini' },
+  // 2026-10-08 扩展的 6 个厂商
+  { provider: 'meta', model: 'llama-4-scout', expected: 'meta' },
+  { provider: 'mistral', model: 'mistral-large-latest', expected: 'mistral' },
+  { provider: 'mistral', model: 'mistralai/mixtral-8x22b', expected: 'mistral' },
+  { provider: 'rwkv', model: 'rwkv-7-g1', expected: 'rwkv' },
+  { provider: 'volcengine', model: 'doubao-seed-1.6', expected: 'seed' },
+  { provider: 'bytedance', model: 'seed-oss-36b', expected: 'seed' },
+  { provider: 'baidu', model: 'ernie-4.5-turbo', expected: 'ernie' },
+  { provider: 'qianfan', model: 'wenxin-4', expected: 'ernie' },
 ]
 
 test('8 个成员岗位正例命中正确 role token', () => {
@@ -77,7 +86,7 @@ test('作者/写手与音频、视频都命中对应岗位（不再掉兜底头�
   assert.equal(memberRoleSlug('成员', '视频渲染与剪辑'), 'video')
 })
 
-test('厂商矩阵命中正确厂商，minimax-m3 保持未识别', () => {
+test('厂商矩阵命中正确厂商（含 2026-10-08 新增的 6 个）', () => {
   for (const { provider, model, expected } of VENDOR_CASES) {
     assert.equal(vendorSlug({ provider, model }), expected, `${provider}/${model} 应命中 ${expected}`)
   }

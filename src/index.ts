@@ -34,7 +34,6 @@ import {
   type ToolsConfig,
 } from './tools.ts'
 import { installAgentTeamsGestureBoundary, registerAgentTeamsCommand } from './command.ts'
-import { readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { collectArchivedTeamsActivity, collectTeamsActivity } from './snapshot.ts'
@@ -42,7 +41,7 @@ import { findTeamByCaptain } from './state.ts'
 import { formatProfilesForPrompt, type TeamProfileConfig } from './profiles.ts'
 import { installTeamCapabilities } from './capabilities.ts'
 import { TEAM_TOOL_NAMES } from './tool-names.ts'
-import { artworkCandidates, findCustomArtwork, packagedArtworkContentType } from './artwork-source.ts'
+import { artworkCandidates, findCustomArtwork, findPackagedArtwork } from './artwork-source.ts'
 
 import { authenticatedWebRoutes, readJsonRequest, RequestBodyError, type BrowserRequestGate, type WebRouteHost } from './web-routes.ts'
 
@@ -199,12 +198,14 @@ export async function resolveArtwork(
   }
   if (data === undefined) {
     for (const candidate of candidates) {
-      try {
-        data = await readFile(join(options.artDir, candidate))
-        contentType = packagedArtworkContentType(candidate)
+      // The bundle may ship a member/leader candidate under another accepted
+      // extension (the `-full` preview family is WebP); probe like the custom
+      // directory does so one request answers every encoding of the same stem.
+      const hit = await findPackagedArtwork(options.artDir, candidate)
+      if (hit !== undefined) {
+        data = hit.data
+        contentType = hit.contentType
         break
-      } catch {
-        // Not shipped in the bundle: fall through to the next candidate.
       }
     }
   }
