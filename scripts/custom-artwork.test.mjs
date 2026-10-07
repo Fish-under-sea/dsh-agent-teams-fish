@@ -19,6 +19,7 @@ import {
   artworkStems,
   findCustomArtwork,
   isAllowedArtwork,
+  packagedArtworkContentType,
 } from '../lib/artwork-source.js'
 
 const PNG = Buffer.from('89504e470d0a1a0a', 'hex')
@@ -178,4 +179,13 @@ test('a directory named like a slug is not served as artwork', async () => {
   } finally {
     await done()
   }
+})
+
+test('a packaged slug keeps the media type of its own extension', () => {
+  // The bundle carries PNG artwork *and* brand SVGs; assuming PNG for every
+  // packaged file is what made badges silently vanish in 0.3.1.
+  assert.equal(packagedArtworkContentType('member-qwen-qa-v2.png'), 'image/png')
+  assert.equal(packagedArtworkContentType('brand-deepseek.svg'), 'image/svg+xml')
+  assert.equal(packagedArtworkContentType('brand-qwen.png'), 'image/png')
+  assert.equal(packagedArtworkContentType('member-qwen-qa-v2.webp'), 'image/webp')
 })

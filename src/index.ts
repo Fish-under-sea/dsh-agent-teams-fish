@@ -42,7 +42,7 @@ import { findTeamByCaptain } from './state.ts'
 import { formatProfilesForPrompt, type TeamProfileConfig } from './profiles.ts'
 import { installTeamCapabilities } from './capabilities.ts'
 import { TEAM_TOOL_NAMES } from './tool-names.ts'
-import { artworkCandidates, findCustomArtwork } from './artwork-source.ts'
+import { artworkCandidates, findCustomArtwork, packagedArtworkContentType } from './artwork-source.ts'
 
 import { authenticatedWebRoutes, readJsonRequest, RequestBodyError, type BrowserRequestGate, type WebRouteHost } from './web-routes.ts'
 
@@ -159,6 +159,66 @@ export function usageSectionText(toolNames: string, profilesText = ''): string {
 9. Halted means the user stopped work (including the captain turn). Resume only on a later explicit user request with a reason, via agent_teams_resume or create_task({resume:true,resumeReason}); creating tasks alone never resumes. Escalated means the review loop hit its limit, not a halt. Deployment requires explicit user confirmation.
 10. Wait for all required tasks to be terminal and members idle/ready, present results, then delete/archive unless the user wants to continue. Never discard unfinished work without authorization.
 Tools: ${toolNames}${profilesText === '' ? '' : `\n\n${profilesText}`}`
+}
+
+/** One resolved artwork response: the bytes, their media type, and the cache policy. */
+export interface ResolvedArtwork {
+  data: Buffer
+  contentType: string
+  cacheControl: string
+}
+
+/**
+ * Resolve one artwork request into the bytes and media type to serve.
+ *
+ * Extracted from the HTTP handler so the degradation chain, the media type and
+ * the cache policy stay assertable without a live web server.
+ * @param name - requested artwork slug; foreign or unknown names resolve to undefined.
+ * @param options - the bundled artwork directory plus the optional custom override.
+ * @returns the response to serve, or undefined when nothing matched.
+ */
+export async function resolveArtwork(
+  name: string,
+  options: { artDir: string; customArtDir?: string },
+): Promise<ResolvedArtwork | undefined> {
+  const candidates = artworkCandidates(name)
+  if (candidates.length === 0) return undefined
+  let data: Buffer | undefined
+  let contentType: string | undefined
+  let fromCustom = false
+  if (options.customArtDir !== undefined) {
+    for (const candidate of candidates) {
+      const hit = await findCustomArtwork(options.customArtDir, candidate)
+      if (hit !== undefined) {
+        data = hit.data
+        contentType = hit.contentType
+        fromCustom = true
+        break
+      }
+    }
+  }
+  if (data === undefined) {
+    for (const candidate of candidates) {
+      try {
+        data = await readFile(join(options.artDir, candidate))
+        contentType = packagedArtworkContentType(candidate)
+        break
+      } catch {
+        // Not shipped in the bundle: fall through to the next candidate.
+      }
+    }
+  }
+  if (data === undefined) return undefined
+  return {
+    data,
+    contentType: contentType ?? 'application/octet-stream',
+    // A custom artwork directory can change any slug at any time — even slugs
+    // that also ship packaged, such as the captain avatar — so nothing may sit
+    // in the browser cache while one is configured, nor for bytes that came
+    // from it. Otherwise packaged bytes cached before a file was dropped in
+    // would keep winning for 24h, which looks exactly like a broken override.
+    cacheControl: fromCustom || options.customArtDir !== undefined ? 'no-store' : 'public, max-age=86400',
+  }
 }
 
 export function apply(ctx: Context, config: Config): void {
@@ -464,51 +524,16 @@ export function apply(ctx: Context, config: Config): void {
       }
       // Most specific slug first: vendor+role, then role, then vendor, then the
       // packaged whale. A missing combination degrades instead of breaking.
-      const candidates = artworkCandidates(name)
-      if (candidates.length === 0) {
+      if (artworkCandidates(name).length === 0) {
         res.writeHead(404)
         res.end()
         return
       }
       try {
-        let customData: Buffer | undefined
-        let customType: string | undefined
-        if (customArtDir !== undefined) {
-          for (const candidate of candidates) {
-            const hit = await findCustomArtwork(customArtDir, candidate)
-            if (hit !== undefined) {
-              customData = hit.data
-              customType = hit.contentType
-              break
-            }
-          }
-        }
-        let data = customData
-        let contentType = customType
-        if (data === undefined) {
-          for (const candidate of candidates) {
-            try {
-              data = await readFile(join(artDir, candidate))
-              contentType = 'image/png'
-              break
-            } catch {
-              // Not shipped in the bundle: fall through to the next candidate.
-            }
-          }
-        }
-        if (data === undefined) throw new Error(`no artwork shipped for ${name}`)
-        res.writeHead(200, {
-          'content-type': contentType ?? 'image/png',
-          // A custom artwork directory can change any slug at any time — even
-          // slugs that also ship packaged, such as the captain avatar — so
-          // nothing may sit in the browser cache while one is configured.
-          // Otherwise the packaged bytes cached before a file was dropped in
-          // would keep winning for 24h, which looks exactly like a broken
-          // override.
-          'cache-control':
-            customData === undefined && customArtDir === undefined ? 'public, max-age=86400' : 'no-store',
-        })
-        res.end(data)
+        const resolved = await resolveArtwork(name, { artDir, customArtDir })
+        if (resolved === undefined) throw new Error(`no artwork shipped for ${name}`)
+        res.writeHead(200, { 'content-type': resolved.contentType, 'cache-control': resolved.cacheControl })
+        res.end(resolved.data)
       } catch (error: unknown) {
         ctx.logger.warn(`agent-teams: artwork read failed for ${name}: ${String(error)}`)
         res.writeHead(404)

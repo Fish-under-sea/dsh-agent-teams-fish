@@ -15,6 +15,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promis
 import { existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
   CAPTAIN_KEY,
   appendMailbox,
@@ -480,6 +481,40 @@ check(
   'every vendor brand mark is a self-contained svg',
   offSpecBrand.length === 0,
   `invalid = ${JSON.stringify(offSpecBrand.map(({ name }) => name))}`,
+)
+// 0.3.2 回归：包内素材既有 PNG 也有 brand-<vendor>.svg，宿主端必须按**扩展名**
+// 给媒体类型。0.3.1 把包内素材一律当 image/png 发出去，浏览器解码 SVG 失败 →
+// 徽标 onError 回落活动状态图，看起来就像「SVG 根本没进包」。这里直接调真实
+// 解析函数（与 HTTP 处理器同一份代码），逐张比对媒体类型与字节数。
+const { resolveArtwork } = await import('../lib/index.js')
+const packagedArtDir = fileURLToPath(artworkDir)
+const artworkResponses = []
+for (const name of packagedArtwork) {
+  const resolved = await resolveArtwork(name, { artDir: packagedArtDir })
+  artworkResponses.push({
+    name,
+    type: resolved?.contentType,
+    bytes: resolved?.data.byteLength ?? 0,
+    disk: (await readFile(new URL(name, artworkDir))).byteLength,
+  })
+}
+const wrongArtworkType = artworkResponses.filter(entry => entry.type
+  !== (entry.name.endsWith('.svg') ? 'image/svg+xml' : 'image/png'))
+const mismatchedArtworkBytes = artworkResponses.filter(entry => entry.bytes !== entry.disk)
+check(
+  'packaged artwork is served with the media type its own extension declares',
+  wrongArtworkType.length === 0 && mismatchedArtworkBytes.length === 0,
+  `wrong type = ${JSON.stringify(wrongArtworkType.map(entry => `${entry.name}:${entry.type}`))}`
+    + `; byte mismatch = ${JSON.stringify(mismatchedArtworkBytes.map(entry => entry.name))}`,
+)
+const servedBrands = await Promise.all(ARTWORK_VENDORS.map(
+  vendor => resolveArtwork(`brand-${vendor}.svg`, { artDir: packagedArtDir }),
+))
+check(
+  'every vendor brand mark reaches the browser as an svg document',
+  servedBrands.every(resolved => resolved?.contentType === 'image/svg+xml'
+    && resolved.data.subarray(0, 4).toString('utf8') === '<svg'),
+  `served = ${JSON.stringify(servedBrands.map(resolved => resolved?.contentType ?? 'unresolved'))}`,
 )
 const eightRoleArtwork = canonicalRoster.map(([name, role]) => memberArtUrl(name, role))
 check(

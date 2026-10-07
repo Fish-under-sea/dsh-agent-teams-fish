@@ -55,6 +55,24 @@ const CUSTOM_EXTENSIONS: ReadonlyArray<readonly [string, string]> = [
 /** Decorative stem suffixes, stripped in any order. */
 const STEM_SUFFIXES: ReadonlyArray<string> = ['-v2', '-full']
 
+/**
+ * Media type for a packaged artwork file, derived from its extension.
+ *
+ * The bundle ships both `.png` artwork and `brand-<vendor>.svg` marks, so the
+ * host half must not assume PNG: sending SVG bytes as `image/png` makes the
+ * browser fail to decode them, and the badge then degrades to the activity
+ * image on `onError` — which looks exactly like "the SVG was never packaged"
+ * (that is what shipped in 0.3.1).
+ * @param slug - packaged artwork file name, for example `brand-qwen.svg`.
+ * @returns the media type for that extension, or `application/octet-stream`.
+ */
+export function packagedArtworkContentType(slug: string): string {
+  for (const [extension, contentType] of CUSTOM_EXTENSIONS) {
+    if (slug.endsWith(extension)) return contentType
+  }
+  return 'application/octet-stream'
+}
+
 /** One custom artwork file that answers a requested slug. */
 export interface CustomArtwork {
   /** Absolute path the bytes were read from; reported in diagnostics. */
