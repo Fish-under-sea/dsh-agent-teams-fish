@@ -60,6 +60,37 @@ const VENDOR_CASES = [
   { provider: 'bytedance', model: 'seed-oss-36b', expected: 'seed' },
   { provider: 'baidu', model: 'ernie-4.5-turbo', expected: 'ernie' },
   { provider: 'qianfan', model: 'wenxin-4', expected: 'ernie' },
+  // 2026-10-08 修复（病根一）：尾随 \b 卡住「名字 + 数字」的 id —— \bhunyuan\b 匹配不了
+  // hunyuan3/hunyuan4，\brwkv\b 匹配不了 rwkv7，\bseed\b 匹配不了 seed1.6，
+  // \babab\b 匹配不了 abab6.5s，\bchatglm\b 匹配不了 chatglm3-6b。
+  // 混元线上真实踩到：模型 id 是 hunyuan3 / hy3 时整队掉兜底鲸鱼头像。
+  { provider: 'tencent', model: 'hunyuan3', expected: 'hunyuan' },
+  { provider: 'tencent', model: 'hunyuan4', expected: 'hunyuan' },
+  { provider: 'rwkv', model: 'rwkv7', expected: 'rwkv' },
+  { provider: 'rwkv', model: 'rwkv5-world', expected: 'rwkv' },
+  { provider: 'volcengine', model: 'seed1.6', expected: 'seed' },
+  { provider: 'atria', model: 'abab6.5s-chat', expected: 'minimax' },
+  { provider: 'atria', model: 'abab7-chat-preview', expected: 'minimax' },
+  { provider: 'atria', model: 'hailuo-02', expected: 'minimax' },
+  { provider: 'zai', model: 'chatglm3-6b', expected: 'glm' },
+  { provider: 'bailian', model: 'qwq-32b', expected: 'qwen' },
+  // 混元「hy」家族：hy3 / hy-3 / hy_1.5 / hy-1.8b 都要认（用户口径：混元多用 hy）
+  { provider: 'tencent', model: 'hy3', expected: 'hunyuan' },
+  { provider: 'tencent', model: 'hy-3-preview', expected: 'hunyuan' },
+  { provider: 'tencent', model: 'hy_1.5', expected: 'hunyuan' },
+  // 2026-10-08 修复（病根二）：JS 的 \b 只认 ASCII \w，\b混元\b 这类**永远不成立**
+  // —— 中文别名此前全是死分支。中文 id 现在不带 \b。
+  { provider: 'tencent', model: '混元', expected: 'hunyuan' },
+  { provider: 'bailian', model: '通义千问', expected: 'qwen' },
+  { provider: 'zai', model: '智谱清言', expected: 'glm' },
+  { provider: 'volcengine', model: '豆包', expected: 'seed' },
+  { provider: 'baidu', model: '文心一言', expected: 'ernie' },
+  { provider: 'baidu', model: '千帆', expected: 'ernie' },
+  // mistral 家族补齐：magistral / pixtral / voxtral / ministral 此前全部漏命中
+  { provider: 'mistral', model: 'magistral-small-2509', expected: 'mistral' },
+  { provider: 'mistral', model: 'pixtral-large-2411', expected: 'mistral' },
+  { provider: 'mistral', model: 'voxtral-mini-2507', expected: 'mistral' },
+  { provider: 'mistral', model: 'ministral-8b', expected: 'mistral' },
 ]
 
 test('8 个成员岗位正例命中正确 role token', () => {
@@ -97,6 +128,15 @@ test('hy 前缀命中混元，含 hy 的英文单词不被误识别', () => {
   // 非腾讯 provider 时，含 hy 的英文单词不应被识别为混元。
   assert.equal(vendorSlug({ provider: 'some', model: 'hypothesis' }), undefined)
   assert.equal(vendorSlug({ provider: 'some', model: 'physics' }), undefined)
+})
+
+test('放宽 hy / stral 后仍不吞无关词（provider 与 model 两侧都验）', () => {
+  for (const model of ['hypothesis', 'physics', 'hybrid-1', 'hyperbolic', 'orchestral-music', 'metadata-model']) {
+    assert.equal(vendorSlug({ provider: 'some', model }), undefined, `${model} 不应被误识别`)
+  }
+  // provider 叫 hyperbolic（真实存在的推理服务商）时，仍按 model 判厂商。
+  assert.equal(vendorSlug({ provider: 'hyperbolic', model: 'meta-llama/Llama-3.3-70B' }), 'meta')
+  assert.equal(vendorSlug({ provider: 'hyperbolic', model: 'hy3' }), 'hunyuan')
 })
 
 test('resolveMemberArtwork：命中岗位 + 厂商 → 岗位-厂商组合图', () => {
