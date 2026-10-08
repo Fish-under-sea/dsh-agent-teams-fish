@@ -66,7 +66,7 @@
 |------|------|---------|
 | 自定义美术目录 | 新增 `artworkDir` 配置。配置后自定义图片优先于随包素材；且**只放行已知文件名**（未知文件名、`..`、绝对路径一律 404） | `src/artwork-source.ts`〔新增〕· `src/index.ts` |
 | 厂商素材随包分发（[0.3.1](release-notes/v0.3.1.md)） | 厂商头像与商标 SVG 进包，装完即有，不再依赖某台机器上的外部目录 | `assets/agent-teams/` · `scripts/import-vendor-artwork.mjs`〔新增〕 |
-| 包内素材按扩展名给 MIME（0.3.2） | 内置素材里也有 `brand-<vendor>.svg`；[0.3.1](release-notes/v0.3.1.md) 把包内素材一律当 `image/png` 发送，浏览器解码 SVG 失败后徽标静默回落成活动状态图 —— 现在按扩展名推断 | `src/artwork-source.ts` · `src/index.ts` |
+| 包内素材按扩展名给 MIME（[0.3.2](release-notes/v0.3.2.md)） | 内置素材里也有 `brand-<vendor>.svg`；[0.3.1](release-notes/v0.3.1.md) 把包内素材一律当 `image/png` 发送，浏览器解码 SVG 失败后徽标静默回落成活动状态图 —— 现在按扩展名推断 | `src/artwork-source.ts` · `src/index.ts` |
 | 厂商头像命名空间 | 头像名从「岗位」扩展为「厂商 + 岗位」：`member-<vendor>-<role>-v2.png`；识别不出厂商时自动回落到岗位通用图 | 同上 · `src/client/artwork.ts` |
 | 厂商识别 | 从成员的 `provider + model` 路由推断厂商 —— `bailian` 一家同时供 qwen 与 deepseek，所以**以 model 为准** | `src/client/artwork.ts` |
 | 厂商商标徽标 | 头像右下角 22px 徽标从「活动状态图」换成「厂商商标 SVG」（`brand-<vendor>.svg`）；文件缺失时 `onError` 自动换回活动图，**不会破图** | 同上 · `ActivityPanel.tsx` · `ActivityPanel.module.css` |
@@ -78,7 +78,8 @@
 | 高清预览族（2026-10-08） | 列表小图仍是 256 PNG；点击放大改用**去背后的原分辨率**画面（岗位/队长 1024×1024、厂商立绘长边 ≤2048），编成 WebP 质量 92 带 alpha —— 整套 125 张高清合计 ~19 MB，PNG 同分辨率要 ~125 MB | `assets/agent-teams/` |
 | 第二轮厂商素材（2026-10-08） | 厂商命名空间 9 → 15，厂商素材 108 → 265 张；`audio` / `video` 两个此前只登记未出图的岗位桶补齐（10 个厂商）；素材分两档：前 10 个厂商有「厂商 × 岗位」全套，后 5 个只有通用图与立绘 | `assets/agent-teams/` · `scripts/import-vendor-artwork.mjs` |
 | 路由链单测 | 新增 20 条单测：降级链顺序、未知厂商拒绝、非 `.png` 请求拒绝、路径穿越拒绝、包内扩展名探测 | `scripts/custom-artwork.test.mjs`〔新增〕 |
-| 中英双语 README（0.4.0） | 新增 [`README.en.md`](README.en.md) 英文对照版，章节与中文版一一对应 | `README.md` · `README.en.md` |
+| 中英双语 README（[0.4.0](release-notes/v0.4.0.md)） | 新增 [`README.en.md`](README.en.md) 英文对照版，章节与中文版一一对应 | `README.md` · `README.en.md` |
+| **厂商识别细化 + 两处系统性修复**（[0.4.1](release-notes/v0.4.1.md)） | ① 尾随 `\b` 卡住「名字 + 数字」的 id：`hunyuan3` / `rwkv7` / `seed1.6` / `abab6.5s` / `chatglm3-6b` 全都匹配不上；② **`\b` 对 CJK 永远不成立**（JS 的 `\w` 只含 ASCII），中文别名「混元 / 通义 / 智谱 / 豆包 / 文心 / 千帆」此前**全是死分支**。本次补齐混元 `hy` 家族（`hy3` / `hy-3` / `hy_1.5`）与 minimax（`abab6.5s` / `hailuo`）、mistral 家族（`magistral` / `pixtral` / `voxtral` / `ministral`）、qwen（`qwq`）等共 **18 处漏命中**，且 0 误伤（`hypothesis` / `hybrid-1` / `hyperbolic` / `orchestral-music` / `metadata-model` 仍不命中） | `src/client/artwork.ts` · `scripts/artwork-role-match.test.mjs` |
 
 ## 安装与启用
 
@@ -96,7 +97,7 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 
 ```jsonc
 "dependencies": {
-  "dsh-agent-teams-fish": "^0.4.0"
+  "dsh-agent-teams-fish": "^0.4.1"
 }
 ```
 
@@ -275,7 +276,7 @@ dsh-agent-teams-fish/
 | **打包同名 URL 会被浏览器缓存 24h** | 打包图带 `max-age=86400`：某 URL 先请求过一次打包图，之后再放自定义文件，浏览器 24h 内不会重新请求，看着就像「改了没生效」（队长真踩过）。现已双重规避：队长改请求**全新 URL** + 配了目录就一律 `no-store` |
 | **内置同名文件的硬刷新例外仍在** | 替换「同时也随插件发布」的文件名（`team-lead-v2.png`、`member-<role>-v2.png`、`action-*.png`）第一次需 `Ctrl+Shift+R` 挤掉旧缓存。厂商命名空间（`member-<vendor>-*-v2.png`、`brand-<vendor>.svg`）是 [0.3.1](release-notes/v0.3.1.md) 才进包的新 URL，浏览器从没见过，不受这段缓存影响 |
 | **高清族上线时的同 URL 缓存**（2026-10-08） | 升级前 `member-<vendor>-*-full-v2.png` 请求会被宿主解析成 256 头像并在浏览器里按 `max-age=86400` 存 24h；升级后同一 URL 可能还吐旧字节。**没配 `artworkDir` 的机器**第一次升级后硬刷新一次即可（配了的走 `no-store`，不受影响） |
-| **徽标的媒体类型（0.3.2 修）** | 内置素材里同样有 SVG，但 [0.3.1](release-notes/v0.3.1.md) 的宿主端把**包内**素材一律当 `image/png` 发送 → 浏览器解码失败 → 徽标 `onError` 回落活动图，看起来就像「SVG 没进包」；配了 `artworkDir` 的机器不受影响（那条分支本来就按扩展名推断）。现在两条路径共用同一张扩展名表（`member-` / `team-lead-` 族按扩展名探测，商标与活动图保持严格候选名），并有门禁断言每个 `brand-<vendor>.svg` 以 `image/svg+xml` 送达、高清 WebP 以 `image/webp` 送达 |
+| **徽标的媒体类型（[0.3.2](release-notes/v0.3.2.md) 修）** | 内置素材里同样有 SVG，但 [0.3.1](release-notes/v0.3.1.md) 的宿主端把**包内**素材一律当 `image/png` 发送 → 浏览器解码失败 → 徽标 `onError` 回落活动图，看起来就像「SVG 没进包」；配了 `artworkDir` 的机器不受影响（那条分支本来就按扩展名推断）。现在两条路径共用同一张扩展名表（`member-` / `team-lead-` 族按扩展名探测，商标与活动图保持严格候选名），并有门禁断言每个 `brand-<vendor>.svg` 以 `image/svg+xml` 送达、高清 WebP 以 `image/webp` 送达 |
 | **`artworkDir` 不可移植** | 它是本机绝对路径，且插件按进程工作目录解析。换机器后若目录不存在，查找链直接落到随包素材 —— [0.3.1](release-notes/v0.3.1.md) 之前这一步就是「厂商头像集体消失」的现场 |
 | **`lib/` 是构建产物** | 与上游一致随仓库跟踪（便于 GitHub 直装），所以一次构建的 diff 较大。`package.json` 只改身份字段：包名换成 `dsh-agent-teams-fish`、`repository`/`homepage`/`bugs` 指向本仓库，**版本与 `author` 保持上游不变**；改名会牵动插件行与客户端注册名，装机时 profile 要同步改 |
 | **未跑上游发布校验** | 上游 `verify:release` / `verify:compatibility` 等脚本校验的是上游仓库元数据，本版未逐一执行 |
