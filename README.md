@@ -81,6 +81,7 @@
 | 中英双语 README（[0.4.0](release-notes/v0.4.0.md)） | 新增 [`README.en.md`](README.en.md) 英文对照版，章节与中文版一一对应 | `README.md` · `README.en.md` |
 | **厂商识别细化 + 两处系统性修复**（[0.4.1](release-notes/v0.4.1.md)） | ① 尾随 `\b` 卡住「名字 + 数字」的 id：`hunyuan3` / `rwkv7` / `seed1.6` / `abab6.5s` / `chatglm3-6b` 全都匹配不上；② **`\b` 对 CJK 永远不成立**（JS 的 `\w` 只含 ASCII），中文别名「混元 / 通义 / 智谱 / 豆包 / 文心 / 千帆」此前**全是死分支**。本次补齐混元 `hy` 家族（`hy3` / `hy-3` / `hy_1.5`）与 minimax（`abab6.5s` / `hailuo`）、mistral 家族（`magistral` / `pixtral` / `voxtral` / `ministral`）、qwen（`qwq`）等共 **18 处漏命中**，且 0 误伤（`hypothesis` / `hybrid-1` / `hyperbolic` / `orchestral-music` / `metadata-model` 仍不命中） | `src/client/artwork.ts` · `scripts/artwork-role-match.test.mjs` |
 | **队长头像跟随路由**（[0.4.2](release-notes/v0.4.2.md)） | 队长图此前是硬编码常量 `team-lead-deepseek-v2.png`，队长换成 qwen / claude / glm 时仍请求 deepseek 那张，**随包的另外 9 张队长图永远不可达**；根因是宿主端 `team.json` 只记 `captainSessionId`、没有队长的模型路由。现建队时写入 `captainProvider` / `captainModel`，快照暴露（实时值优先），面板走与成员同一套厂商识别 | `src/client/artwork.ts` · `src/tools.ts` · `src/snapshot.ts` · `src/types.ts` |
+| **README 矛盾行修正**（[0.4.3](release-notes/v0.4.3.md)） | [0.4.2](release-notes/v0.4.2.md) 发布时漏改「已知限制」表里的「队长不跟随模型路由」，导致同一份 README 里新旧两种说法并存。**npm 包内 README 在发布时冻结、事后无法修改**，故补发 0.4.3 把正确文案带上 npm；功能与 [0.4.2](release-notes/v0.4.2.md) 完全一致，仅为文档修正 | `README.md` · `README.en.md` |
 
 ## 安装与启用
 
@@ -98,7 +99,7 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 
 ```jsonc
 "dependencies": {
-  "dsh-agent-teams-fish": "^0.4.2"
+  "dsh-agent-teams-fish": "^0.4.3"
 }
 ```
 
@@ -273,7 +274,7 @@ dsh-agent-teams-fish/
 
 | 项 | 实际情况 |
 |----|---------|
-| **队长不跟随模型路由**（[0.4.2](release-notes/v0.4.2.md) 已修） | 此前面板快照（`TeamActivitySnapshot`）里只有成员的 `provider/model`，没有队长的，所以队长只能靠文件覆盖。0.4.2 给 `TeamState` 加了 `captainProvider` / `captainModel`（建队时写入），快照暴露且**实时值优先**，队长图从此与成员走同一套厂商识别；老团队记录没有该字段，回落随包队长图 |
+| **队长不跟随模型路由**（[0.4.2](release-notes/v0.4.2.md) 已修） | 此前面板快照（`TeamActivitySnapshot`）里只有成员的 `provider/model`，没有队长的，所以队长只能靠文件覆盖。[0.4.2](release-notes/v0.4.2.md) 给 `TeamState` 加了 `captainProvider` / `captainModel`（建队时写入），快照暴露且**实时值优先**，队长图从此与成员走同一套厂商识别；老团队记录没有该字段，回落随包队长图 |
 | **打包同名 URL 会被浏览器缓存 24h** | 打包图带 `max-age=86400`：某 URL 先请求过一次打包图，之后再放自定义文件，浏览器 24h 内不会重新请求，看着就像「改了没生效」（队长真踩过）。现已双重规避：队长改请求**全新 URL** + 配了目录就一律 `no-store` |
 | **内置同名文件的硬刷新例外仍在** | 替换「同时也随插件发布」的文件名（`team-lead-v2.png`、`member-<role>-v2.png`、`action-*.png`）第一次需 `Ctrl+Shift+R` 挤掉旧缓存。厂商命名空间（`member-<vendor>-*-v2.png`、`brand-<vendor>.svg`）是 [0.3.1](release-notes/v0.3.1.md) 才进包的新 URL，浏览器从没见过，不受这段缓存影响 |
 | **高清族上线时的同 URL 缓存**（2026-10-08） | 升级前 `member-<vendor>-*-full-v2.png` 请求会被宿主解析成 256 头像并在浏览器里按 `max-age=86400` 存 24h；升级后同一 URL 可能还吐旧字节。**没配 `artworkDir` 的机器**第一次升级后硬刷新一次即可（配了的走 `no-store`，不受影响） |

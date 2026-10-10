@@ -81,6 +81,7 @@ This fork **does not touch that collaboration logic** — it only adds "what the
 | Bilingual README ([0.4.0](release-notes/v0.4.0.md)) | Added [`README.en.md`](README.en.md) as an English counterpart, with sections matching the Chinese version one-to-one | `README.md` · `README.en.md` |
 | **Refined vendor matching + two systemic fixes** ([0.4.1](release-notes/v0.4.1.md)) | ① A trailing `\b` blocked "name + digits" ids: `hunyuan3` / `rwkv7` / `seed1.6` / `abab6.5s` / `chatglm3-6b` all failed to match; ② **`\b` never holds next to CJK** (JS `\w` is ASCII-only), so the Chinese aliases 混元 / 通义 / 智谱 / 豆包 / 文心 / 千帆 were **dead branches all along**. This release closes **18 misses** — the hunyuan `hy` family (`hy3` / `hy-3` / `hy_1.5`), minimax (`abab6.5s` / `hailuo`), the mistral family (`magistral` / `pixtral` / `voxtral` / `ministral`), qwen (`qwq`) and more — with zero false positives (`hypothesis` / `hybrid-1` / `hyperbolic` / `orchestral-music` / `metadata-model` still do not match) | `src/client/artwork.ts` · `scripts/artwork-role-match.test.mjs` |
 | **Captain avatar follows the route** ([0.4.2](release-notes/v0.4.2.md)) | The captain image used to be a hard-coded constant `team-lead-deepseek-v2.png`, so a captain running qwen / claude / glm still requested the DeepSeek one — the **other 9 packaged captain images were unreachable**. The root cause was the host side: `team.json` recorded only `captainSessionId`, never the captain's model route. Team creation now writes `captainProvider` / `captainModel`, the snapshot exposes them (live value wins), and the panel uses the same vendor detection as members | `src/client/artwork.ts` · `src/tools.ts` · `src/snapshot.ts` · `src/types.ts` |
+| **Contradictory README line fixed** ([0.4.3](release-notes/v0.4.3.md)) | The [0.4.2](release-notes/v0.4.2.md) release missed the "Captain does not follow model routing" line in the known-limitations table, leaving the same README asserting both the old and new behavior. **An npm package's README is frozen at publish time and cannot be edited afterwards**, so 0.4.3 re-publishes the corrected text; functionality is identical to [0.4.2](release-notes/v0.4.2.md) — a documentation-only release | `README.md` · `README.en.md` |
 
 ## Installation & Activation
 
@@ -98,7 +99,7 @@ You can also add it manually to `profiles/<profile>/package.json`:
 
 ```jsonc
 "dependencies": {
-  "dsh-agent-teams-fish": "^0.4.2"
+  "dsh-agent-teams-fish": "^0.4.3"
 }
 ```
 
@@ -273,7 +274,7 @@ dsh-agent-teams-fish/
 
 | Item | Reality |
 |------|---------|
-| **Captain does not follow model routing** (fixed in [0.4.2](release-notes/v0.4.2.md)) | The panel snapshot (`TeamActivitySnapshot`) used to carry only members' `provider/model`, never the captain's, so the captain had to rely on file override. 0.4.2 adds `captainProvider` / `captainModel` to `TeamState` (written at team creation) and exposes them in the snapshot with the **live value winning**, so the captain artwork now uses the same vendor detection as members; legacy team records without the fields fall back to the packaged captain image |
+| **Captain does not follow model routing** (fixed in [0.4.2](release-notes/v0.4.2.md)) | The panel snapshot (`TeamActivitySnapshot`) used to carry only members' `provider/model`, never the captain's, so the captain had to rely on file override. [0.4.2](release-notes/v0.4.2.md) adds `captainProvider` / `captainModel` to `TeamState` (written at team creation) and exposes them in the snapshot with the **live value winning**, so the captain artwork now uses the same vendor detection as members; legacy team records without the fields fall back to the packaged captain image |
 | **Same-URL packaging gets 24h browser cache** | Packaged assets use `max-age=86400`: if a URL was once served a packaged image, subsequent custom files won't be re-requested for 24h, looking like "changes didn't take effect" (the captain actually hit this). Now mitigated doubly: captain requests a **brand-new URL** + `no-store` when a directory is configured |
 | **Built-in same-name files still need hard refresh** | Replacing filenames that "also ship with the plugin" (`team-lead-v2.png`, `member-<role>-v2.png`, `action-*.png`) requires `Ctrl+Shift+R` the first time to bust the old cache. The vendor namespace (`member-<vendor>-*-v2.png`, `brand-<vendor>.svg`) entered the package in [0.3.1](release-notes/v0.3.1.md) as new URLs the browser has never seen, so it's unaffected by this cache issue |
 | **Same-URL cache when HD family launched** (2026-10-08) | Before the upgrade, `member-<vendor>-*-full-v2.png` requests were resolved by the host as 256 avatars and cached by the browser for 24h with `max-age=86400`; after upgrade the same URL might still serve old bytes. **Machines without `artworkDir`** need one hard refresh after the first upgrade (those with it configured use `no-store` and are unaffected) |
