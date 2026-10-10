@@ -273,7 +273,7 @@ dsh-agent-teams-fish/
 
 | 项 | 实际情况 |
 |----|---------|
-| **队长不跟随模型路由** | 面板快照（`TeamActivitySnapshot`）里只有成员的 `provider/model`，没有队长的；宿主能取到队长路由但没进快照。所以队长用文件覆盖，想自动跟随需给快照加字段 |
+| **队长不跟随模型路由**（[0.4.2](release-notes/v0.4.2.md) 已修） | 此前面板快照（`TeamActivitySnapshot`）里只有成员的 `provider/model`，没有队长的，所以队长只能靠文件覆盖。0.4.2 给 `TeamState` 加了 `captainProvider` / `captainModel`（建队时写入），快照暴露且**实时值优先**，队长图从此与成员走同一套厂商识别；老团队记录没有该字段，回落随包队长图 |
 | **打包同名 URL 会被浏览器缓存 24h** | 打包图带 `max-age=86400`：某 URL 先请求过一次打包图，之后再放自定义文件，浏览器 24h 内不会重新请求，看着就像「改了没生效」（队长真踩过）。现已双重规避：队长改请求**全新 URL** + 配了目录就一律 `no-store` |
 | **内置同名文件的硬刷新例外仍在** | 替换「同时也随插件发布」的文件名（`team-lead-v2.png`、`member-<role>-v2.png`、`action-*.png`）第一次需 `Ctrl+Shift+R` 挤掉旧缓存。厂商命名空间（`member-<vendor>-*-v2.png`、`brand-<vendor>.svg`）是 [0.3.1](release-notes/v0.3.1.md) 才进包的新 URL，浏览器从没见过，不受这段缓存影响 |
 | **高清族上线时的同 URL 缓存**（2026-10-08） | 升级前 `member-<vendor>-*-full-v2.png` 请求会被宿主解析成 256 头像并在浏览器里按 `max-age=86400` 存 24h；升级后同一 URL 可能还吐旧字节。**没配 `artworkDir` 的机器**第一次升级后硬刷新一次即可（配了的走 `no-store`，不受影响） |
