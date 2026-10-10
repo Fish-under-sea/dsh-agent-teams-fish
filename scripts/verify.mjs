@@ -76,6 +76,8 @@ import {
   ART_BASE,
   LEAD_ART,
   LEAD_FULL_ART,
+  leadArtUrl,
+  leadFullArtUrl,
   memberArtUrl,
   memberRoleSlug,
   vendorSlug,
@@ -450,6 +452,29 @@ check(
     return first === `member-${vendor}-${memberRoleSlug(name, role)}-v2.png` && packagedArtworkSet.has(first)
   })),
   'the vendor namespace degraded to the packaged whale or a role-generic image',
+)
+// 队长图曾长期是硬编码常量 `team-lead-deepseek-v2.png`：素材齐、降级链通、
+// `artworkReachesPackage(LEAD_ART)` 也是绿的，于是「队长换成 qwen / claude / glm
+// 却仍请求 deepseek 那张」在门禁上完全隐形 —— 随包的另外 9 张队长图永远不可达。
+// 这里钉住队长与成员走**同一条**厂商链：每个有队长图的厂商，第一跳必须是它自己。
+check(
+  'the captain artwork follows the captain vendor on the first hop',
+  ROLE_ART_VENDORS.every(vendor => {
+    const avatar = leadArtUrl(vendor)
+    const full = leadFullArtUrl(vendor)
+    return artworkCandidates(avatar.slice(ART_BASE.length))[0] === `team-lead-${vendor}-v2.png`
+      && artworkCandidates(full.slice(ART_BASE.length))[0] === `team-lead-${vendor}-full-v2.png`
+  }),
+  'the captain artwork is pinned to one vendor instead of following the route',
+)
+check(
+  'an unknown captain vendor degrades to the packaged captain',
+  // 未知 token 绝不能拼进 URL：artworkCandidates 会拒绝它，面板直接破图。
+  leadArtUrl(undefined) === LEAD_ART
+    && leadFullArtUrl(undefined) === LEAD_FULL_ART
+    && leadArtUrl('evil') === LEAD_ART
+    && leadFullArtUrl('evil') === LEAD_FULL_ART,
+  'an unknown captain vendor escaped into the request URL',
 )
 const artworkHeader = async (name) => {
   try {

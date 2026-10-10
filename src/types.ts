@@ -263,6 +263,21 @@ export interface TeamState {
   profile?: TeamProfileSnapshot
   /** Session id of the captain agent that owns this team. */
   captainSessionId: string
+  /**
+   * LLM provider route of the captain when this team was created.
+   *
+   * The captain is the owning session rather than a member, so its route has
+   * no other durable home. It is what lets the panel pick the captain's
+   * vendor artwork (`team-lead-<vendor>-v2.png`) the same way members pick
+   * theirs; without it the captain image is stuck on the packaged DeepSeek
+   * whale no matter which model actually leads the team.
+   *
+   * Optional for durable compatibility: teams created before this field
+   * existed simply keep the packaged fallback.
+   */
+  captainProvider?: string
+  /** Model of the captain when this team was created; see {@link captainProvider}. */
+  captainModel?: string
   createdAt: number
   /** Teammates only; the captain is implicit (the owning session). */
   members: TeamMember[]

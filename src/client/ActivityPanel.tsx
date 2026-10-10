@@ -58,7 +58,7 @@ import {
   type ActivityTask,
   type ActivityTeam,
 } from './activity-monitor.ts'
-import { ACTION_ART, LEAD_ART, LEAD_FULL_ART, brandArtUrl, formatArtPreviewCaption, resolveMemberArtwork, vendorSlug } from './artwork.ts'
+import { ACTION_ART, brandArtUrl, formatArtPreviewCaption, leadArtUrl, leadFullArtUrl, resolveMemberArtwork, vendorSlug } from './artwork.ts'
 import { OPEN_PANEL_EVENT } from './AgentTeamsCard.tsx'
 import { StagingPlanEditor } from './StagingPlanEditor.tsx'
 import type { AgentTeamsCardData } from './agent-teams-card-definition.ts'
@@ -539,6 +539,12 @@ export function TeamSection({ team, modelDirectory, onContinuePlanning, onDiscar
   // role props, so a click opens the `-full` art. The host degrades a missing
   // large file to the avatar art, so requesting it is always safe.
   const [artPreview, setArtPreview] = useState<{ name: string; url: string; labelKey: import('./locales.ts').AgentTeamsLocaleKey | null; kind: 'captain' | 'member' } | null>(null)
+  // The captain follows its own route, exactly like a member follows its own:
+  // the snapshot carries the captain's provider/model, and an unresolved route
+  // degrades to the packaged captain instead of requesting an unknown slug.
+  const captainVendor = vendorSlug({ provider: team.captainProvider, model: team.captainModel })
+  const captainArt = leadArtUrl(captainVendor)
+  const captainFullArt = leadFullArtUrl(captainVendor)
   useEffect(() => {
     if (artPreview === null) return undefined
     const onKeyDown = (event: KeyboardEvent): void => {
@@ -630,12 +636,12 @@ export function TeamSection({ team, modelDirectory, onContinuePlanning, onDiscar
           <span className={css.captainAvatar}>
             <img
               className={css.leadAvatar}
-              src={LEAD_ART}
+              src={captainArt}
               alt=""
               aria-hidden
-              data-art-zoom={LEAD_FULL_ART}
+              data-art-zoom={captainFullArt}
               title={t('member.art.zoom')}
-              onClick={() => { setArtPreview({ name: t('captain.name'), url: LEAD_FULL_ART, labelKey: null, kind: 'captain' }) }}
+              onClick={() => { setArtPreview({ name: t('captain.name'), url: captainFullArt, labelKey: null, kind: 'captain' }) }}
             />
           </span>
           <span className={css.captainInfo}>
@@ -873,6 +879,8 @@ export function historicCardTeam(data: AgentTeamsCardData, owner: string): Activ
     teamId: data.teamId,
     name: data.teamName,
     captainSessionId: data.captainSessionId || owner,
+    captainProvider: data.captainProvider,
+    captainModel: data.captainModel,
     phase: 'running',
     members: data.members.map((member) => ({
       ...member,

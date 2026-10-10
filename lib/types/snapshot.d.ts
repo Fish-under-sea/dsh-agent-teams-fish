@@ -57,6 +57,13 @@ export interface TeamActivitySnapshot {
     readonly name: string;
     readonly description?: string;
     readonly captainSessionId: string;
+    /**
+     * The captain's model route, so the panel can pick the captain's vendor
+     * artwork the same way it does for members. Empty when the host could not
+     * resolve it, in which case the client keeps the packaged fallback.
+     */
+    readonly captainProvider: string;
+    readonly captainModel: string;
     readonly phase: 'staged' | 'running';
     readonly planReviewState?: 'awaiting_review' | 'awaiting_feedback';
     readonly halted?: boolean;

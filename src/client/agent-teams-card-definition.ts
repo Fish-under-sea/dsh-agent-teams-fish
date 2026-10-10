@@ -27,6 +27,9 @@ export interface AgentTeamsCardData {
   readonly teamId: string
   /** The captain session that owns this team (panel follows it). */
   readonly captainSessionId: string
+  /** The captain's model route, so the card picks the captain's vendor art. */
+  readonly captainProvider?: string
+  readonly captainModel?: string
   readonly teamName: string
   readonly members: readonly {
     readonly id: string

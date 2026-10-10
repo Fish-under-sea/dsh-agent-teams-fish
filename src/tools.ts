@@ -59,6 +59,7 @@ import { appendTaskEvidence } from './quality-gates.ts'
 import type { ContractAmendmentInput } from './state.ts'
 import type { AcceptanceResult, CommandResult, ReviewFinding, ReviewVerdict, TaskKind } from './types.ts'
 import {
+  captainRouteOf,
   deliverToMember,
   installRetiredMemberGuard,
   installMemberSelectionRuntime,
@@ -2307,6 +2308,7 @@ async function initializeProfileTeam(input: {
     },
     ...profile.reviewPolicy === undefined ? {} : { reviewPolicy: profile.reviewPolicy },
     captainSessionId: input.captain.id,
+    ...captainRouteOf(input.captain),
     createdAt: now,
     ...input.staged ? { phase: 'staged' as const, planReviewState: 'awaiting_review' as const } : {},
     members: profile.members.map((template, index) => {

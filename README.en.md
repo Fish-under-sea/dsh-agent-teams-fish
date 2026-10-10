@@ -72,7 +72,7 @@ This fork **does not touch that collaboration logic** — it only adds "what the
 | Vendor brand badge | The 22px badge in the avatar's corner changes from "activity state image" to "vendor brand SVG" (`brand-<vendor>.svg`); `onError` automatically falls back to the activity image when the file is missing — **no broken images** | Same · `ActivityPanel.tsx` · `ActivityPanel.module.css` |
 | Chinese role labels | Role labels in the panel and cards display in Chinese (工程师, 测试, 安全, 研究员, 设计, 文档, 数据, 运营, 音频, 视频) | `src/client/locales.ts` |
 | Click-to-enlarge | Clicking an avatar opens a 320px large preview (automatically degrades to the avatar when the `-full` file is missing); close with Esc or by clicking the backdrop | `ActivityPanel.tsx` |
-| Captain avatar | The captain does not follow model routing; instead uses file override: `team-lead-<vendor>.png` first, `team-lead-v2.png` as fallback — and **requests a brand-new URL** to bypass the browser's 24h cache | `src/client/artwork.ts` |
+| Captain avatar | The captain **follows its own model route**: team creation records the captain's `provider`/`model` into `team.json` (`captainProvider` / `captainModel`), and the panel requests `team-lead-<vendor>-v2.png`, falling back to `team-lead-v2.png` when the vendor is unknown — and **requests a brand-new URL** to bypass the browser's 24h cache | `src/client/artwork.ts` · `src/tools.ts` · `src/snapshot.ts` |
 | Vendor-generic portrait fallback | When the vendor is recognized but the role-specific art is missing, `member-<vendor>-v2.png` is tried first, then packaged assets | `src/client/artwork.ts` |
 | Tightened cache policy | When `artworkDir` is configured, all artwork responses use `no-store` (previously packaged assets used `max-age=86400`, causing "changed the image but it looks the same") | `src/index.ts` |
 | High-resolution preview family (2026-10-08) | List thumbnails remain 256 PNG; click-to-enlarge uses the **original-resolution** artwork after background removal (role/captain at 1024×1024, vendor portraits with long edge ≤2048), encoded as WebP quality 92 with alpha — the full set of 125 HD images totals ~19 MB, whereas PNG at the same resolution would be ~125 MB | `assets/agent-teams/` |
@@ -80,6 +80,7 @@ This fork **does not touch that collaboration logic** — it only adds "what the
 | Route-chain unit tests | 20 unit tests covering: degradation chain order, unknown vendor rejection, non-`.png` request rejection, path traversal rejection, packaged extension probing | `scripts/custom-artwork.test.mjs` [new] |
 | Bilingual README ([0.4.0](release-notes/v0.4.0.md)) | Added [`README.en.md`](README.en.md) as an English counterpart, with sections matching the Chinese version one-to-one | `README.md` · `README.en.md` |
 | **Refined vendor matching + two systemic fixes** ([0.4.1](release-notes/v0.4.1.md)) | ① A trailing `\b` blocked "name + digits" ids: `hunyuan3` / `rwkv7` / `seed1.6` / `abab6.5s` / `chatglm3-6b` all failed to match; ② **`\b` never holds next to CJK** (JS `\w` is ASCII-only), so the Chinese aliases 混元 / 通义 / 智谱 / 豆包 / 文心 / 千帆 were **dead branches all along**. This release closes **18 misses** — the hunyuan `hy` family (`hy3` / `hy-3` / `hy_1.5`), minimax (`abab6.5s` / `hailuo`), the mistral family (`magistral` / `pixtral` / `voxtral` / `ministral`), qwen (`qwq`) and more — with zero false positives (`hypothesis` / `hybrid-1` / `hyperbolic` / `orchestral-music` / `metadata-model` still do not match) | `src/client/artwork.ts` · `scripts/artwork-role-match.test.mjs` |
+| **Captain avatar follows the route** ([0.4.2](release-notes/v0.4.2.md)) | The captain image used to be a hard-coded constant `team-lead-deepseek-v2.png`, so a captain running qwen / claude / glm still requested the DeepSeek one — the **other 9 packaged captain images were unreachable**. The root cause was the host side: `team.json` recorded only `captainSessionId`, never the captain's model route. Team creation now writes `captainProvider` / `captainModel`, the snapshot exposes them (live value wins), and the panel uses the same vendor detection as members | `src/client/artwork.ts` · `src/tools.ts` · `src/snapshot.ts` · `src/types.ts` |
 
 ## Installation & Activation
 
@@ -97,7 +98,7 @@ You can also add it manually to `profiles/<profile>/package.json`:
 
 ```jsonc
 "dependencies": {
-  "dsh-agent-teams-fish": "^0.4.1"
+  "dsh-agent-teams-fish": "^0.4.2"
 }
 ```
 
@@ -158,7 +159,7 @@ Enable the plugin in `profiles/<profile>/cordis.patch.yml`. Vendor assets alread
 | `member-<role>-v2.png` | Role-generic image (vendor-agnostic) | 40px · 256×256 PNG |
 | `member-<vendor>-v2.png` | Vendor-generic avatar (fallback when the vendor is recognized but role art is missing) | 40px · 256×256 PNG |
 | `member-<vendor>-full-v2.webp` | Vendor-generic HD portrait (fallback large image) | 320px frame · long edge ≤2048 WebP |
-| `team-lead-<vendor>-v2.png` · `team-lead-v2.png` | Captain avatar (vendor-specific first, then generic) | 44px · 256×256 PNG |
+| `team-lead-<vendor>-v2.png` · `team-lead-v2.png` | Captain avatar (vendor-specific first; the captain follows its own model route through the same vendor detection as members) | 44px · 256×256 PNG |
 | `team-lead-<vendor>-full-v2.webp` | Captain's click-to-enlarge HD image | 320px frame · 1024×1024 WebP |
 | `brand-<vendor>.svg` | Vendor brand mark in the avatar corner | 22px · monochrome inline path |
 | `action-*-v2.png` | Activity state image for the badge when vendor is unrecognized | 22px |

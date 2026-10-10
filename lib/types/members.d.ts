@@ -17,6 +17,23 @@ import type { Session } from '@deepseek-ai/dsh-session';
 import { type TeamMember, type TeamState, type TeamTask } from './types.ts';
 /** Persona snapshot of a profile protocol; the full text lives on team.json. */
 export declare const PERSONA_PROTOCOL_MAX_CHARS = 400;
+/**
+ * The captain's own LLM route, for the panel's captain artwork.
+ *
+ * The captain is the owning session rather than a member, so its route has no
+ * other home in the team record. `requestHeader().config` is the route of the
+ * request currently being served; `options` covers a session that has not
+ * issued a request yet (for example a plan staged before the first model turn
+ * completes). Either half may be absent on a legacy host, and an empty half is
+ * omitted so the durable record keeps the packaged fallback instead of an
+ * unusable empty route.
+ * @param captain - the live captain agent.
+ * @returns the `captainProvider` / `captainModel` fields, or `{}` when unknown.
+ */
+export declare function captainRouteOf(captain: Agent): {
+    captainProvider?: string;
+    captainModel?: string;
+};
 /** Runtime knobs for member spawning, resolved from plugin config. */
 export interface MemberRuntimeConfig {
     /** Registered `ctx.subagents` provider name (must support continuable + persona). */

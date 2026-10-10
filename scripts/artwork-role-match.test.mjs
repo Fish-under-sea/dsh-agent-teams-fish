@@ -4,6 +4,10 @@ import {
   memberRoleSlug,
   vendorSlug,
   resolveMemberArtwork,
+  leadArtUrl,
+  leadFullArtUrl,
+  LEAD_ART,
+  LEAD_FULL_ART,
   ROLE_LABELS,
   formatArtPreviewCaption,
 } from '../lib/client/artwork.js'
@@ -293,4 +297,39 @@ test('「评估风险」类文字仍落 security，不被 data 抢走', () => {
 
 test('「结算报表」类文字按既有优先级命中 data（报表 keyword）', () => {
   assert.equal(memberRoleSlug('accounting', '结算报表开发'), 'data')
+})
+
+/**
+ * 队长头像跟随队长自己的模型路由。
+ *
+ * 病根（2026-10-10）：队长图此前是硬编码常量 `team-lead-deepseek-v2.png`，
+ * 面板/卡片/入口三处都直接引用它，从不看队长实际跑在哪个厂商上 —— 队长换成
+ * qwen / claude / glm 时，请求的仍是 deepseek 那张，随包的另外 9 张队长图永远
+ * 不可达。README 写的「`team-lead-<vendor>.png` 优先」只落地了文件覆盖，没有
+ * 落地「跟随路由」。
+ */
+test('leadArtUrl：队长图跟随队长厂商', () => {
+  assert.equal(leadArtUrl('qwen'), `${LEAD_ART.slice(0, LEAD_ART.indexOf('team-lead'))}team-lead-qwen-v2.png`)
+  assert.equal(leadArtUrl('claude'), `${LEAD_ART.slice(0, LEAD_ART.indexOf('team-lead'))}team-lead-claude-v2.png`)
+  assert.equal(leadArtUrl('glm'), `${LEAD_ART.slice(0, LEAD_ART.indexOf('team-lead'))}team-lead-glm-v2.png`)
+})
+
+test('leadFullArtUrl：队长高清图跟随队长厂商', () => {
+  assert.ok(leadFullArtUrl('qwen').endsWith('team-lead-qwen-full-v2.png'))
+  assert.ok(leadFullArtUrl('hunyuan').endsWith('team-lead-hunyuan-full-v2.png'))
+})
+
+test('leadArtUrl：厂商未知时回落到随包队长图（保持既有行为）', () => {
+  assert.equal(leadArtUrl(undefined), LEAD_ART)
+  assert.equal(leadArtUrl(''), LEAD_ART)
+  assert.equal(leadArtUrl('   '), LEAD_ART)
+  assert.equal(leadFullArtUrl(undefined), LEAD_FULL_ART)
+})
+
+test('leadArtUrl：未知厂商 token 不得拼进 URL（防 404）', () => {
+  // 与 member 侧同一条边界：不在 ARTWORK_VENDORS 里的 token 一律回落，
+  // 否则会请求一个 artworkCandidates 拒绝的 slug，面板直接破图。
+  assert.equal(leadArtUrl('evil'), LEAD_ART)
+  assert.equal(leadArtUrl('../secret'), LEAD_ART)
+  assert.equal(leadFullArtUrl('nope'), LEAD_FULL_ART)
 })

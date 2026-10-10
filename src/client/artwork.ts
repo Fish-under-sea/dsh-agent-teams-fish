@@ -131,6 +131,47 @@ export const LEAD_ART = `${ART_BASE}team-lead-deepseek-v2.png`
 /** Large-preview artwork for the captain; degrades to {@link LEAD_ART}. */
 export const LEAD_FULL_ART = `${ART_BASE}team-lead-deepseek-full-v2.png`
 
+/**
+ * Vendor tokens that carry their own captain artwork.
+ *
+ * Derived from {@link VENDOR_ART} rather than restated, so a vendor added to
+ * the member table can never be requested for the captain while the host
+ * rejects the slug: `artworkCandidates` only serves tokens listed in the host
+ * half's `ARTWORK_VENDORS`, and a mismatch would 404 the captain image.
+ */
+const KNOWN_VENDORS: ReadonlySet<string> = new Set(VENDOR_ART.map(([, vendor]) => vendor))
+
+/** A vendor token the host will actually serve, or undefined to fall back. */
+function servableVendor(vendor: string | undefined): string | undefined {
+  const token = vendor?.trim() ?? ''
+  return KNOWN_VENDORS.has(token) ? token : undefined
+}
+
+/**
+ * Captain artwork for a model vendor.
+ *
+ * The captain is the session's own model, so its vendor comes from the team
+ * snapshot's captain route rather than from a member. An unknown or missing
+ * vendor falls back to the packaged `team-lead-deepseek-v2.png`, which the
+ * host still answers — the same degradation the member artwork uses.
+ * @param vendor - vendor token for the captain's route, when known.
+ * @returns the captain avatar URL.
+ */
+export function leadArtUrl(vendor: string | undefined): string {
+  const token = servableVendor(vendor)
+  return token === undefined ? LEAD_ART : `${ART_BASE}team-lead-${token}-v2.png`
+}
+
+/**
+ * Large-preview captain artwork for a model vendor.
+ * @param vendor - vendor token for the captain's route, when known.
+ * @returns the captain HD preview URL; degrades to the avatar art when absent.
+ */
+export function leadFullArtUrl(vendor: string | undefined): string {
+  const token = servableVendor(vendor)
+  return token === undefined ? LEAD_FULL_ART : `${ART_BASE}team-lead-${token}-full-v2.png`
+}
+
 /** Status action artwork per member activity. */
 export const ACTION_ART: Record<'working' | 'idle' | 'unknown', string> = {
   working: `${ART_BASE}action-working-v2.png`,

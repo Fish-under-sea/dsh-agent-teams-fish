@@ -1,6 +1,6 @@
 {
   "name": "dsh-agent-teams-fish",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "AgentTeams 多智能体团队协作（DeepSeek Harness 插件）：自然语言组队、成员与任务依赖 DAG、信箱通信、右侧栏树状监测 —— 上游 NanmiCoder/dsh-agent-teams 的补充版，新增自定义美术目录、十五厂商头像（十个有厂商 × 岗位全套）与厂商商标徽标。",
   "type": "module",
   "main": "lib/index.js",

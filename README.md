@@ -72,7 +72,7 @@
 | 厂商商标徽标 | 头像右下角 22px 徽标从「活动状态图」换成「厂商商标 SVG」（`brand-<vendor>.svg`）；文件缺失时 `onError` 自动换回活动图，**不会破图** | 同上 · `ActivityPanel.tsx` · `ActivityPanel.module.css` |
 | 中文岗位名 | 面板与卡片里的岗位标签显示中文（工程师、测试、安全、研究员、设计、文档、数据、运营、音频、视频） | `src/client/locales.ts` |
 | 点击放大 | 点头像出 320px 大图预览（`-full` 文件缺失时自动降级到头像图），Esc 或点背景关闭 | `ActivityPanel.tsx` |
-| 队长头像 | 队长不跟随模型路由，改为 `team-lead-<vendor>.png` 优先、`team-lead-v2.png` 兜底的文件覆盖；并**改请求全新 URL** 规避浏览器 24h 缓存 | `src/client/artwork.ts` |
+| 队长头像 | 队长**跟随自己的模型路由**：建队时把队长的 `provider`/`model` 写进 `team.json`（`captainProvider` / `captainModel`），面板据此请求 `team-lead-<vendor>-v2.png`，识别不出厂商时回落 `team-lead-v2.png`；并**改请求全新 URL** 规避浏览器 24h 缓存 | `src/client/artwork.ts` · `src/tools.ts` · `src/snapshot.ts` |
 | 厂商通用大图兜底 | 识别出厂商但岗位图缺失时，先尝试 `member-<vendor>-v2.png` 厂商通用图，再回落到随包素材 | `src/client/artwork.ts` |
 | 缓存策略收紧 | 只要配了 `artworkDir`，美术资源一律 `no-store`（原来打包图带 `max-age=86400`，会造成「换了图看着没换」） | `src/index.ts` |
 | 高清预览族（2026-10-08） | 列表小图仍是 256 PNG；点击放大改用**去背后的原分辨率**画面（岗位/队长 1024×1024、厂商立绘长边 ≤2048），编成 WebP 质量 92 带 alpha —— 整套 125 张高清合计 ~19 MB，PNG 同分辨率要 ~125 MB | `assets/agent-teams/` |
@@ -80,6 +80,7 @@
 | 路由链单测 | 新增 20 条单测：降级链顺序、未知厂商拒绝、非 `.png` 请求拒绝、路径穿越拒绝、包内扩展名探测 | `scripts/custom-artwork.test.mjs`〔新增〕 |
 | 中英双语 README（[0.4.0](release-notes/v0.4.0.md)） | 新增 [`README.en.md`](README.en.md) 英文对照版，章节与中文版一一对应 | `README.md` · `README.en.md` |
 | **厂商识别细化 + 两处系统性修复**（[0.4.1](release-notes/v0.4.1.md)） | ① 尾随 `\b` 卡住「名字 + 数字」的 id：`hunyuan3` / `rwkv7` / `seed1.6` / `abab6.5s` / `chatglm3-6b` 全都匹配不上；② **`\b` 对 CJK 永远不成立**（JS 的 `\w` 只含 ASCII），中文别名「混元 / 通义 / 智谱 / 豆包 / 文心 / 千帆」此前**全是死分支**。本次补齐混元 `hy` 家族（`hy3` / `hy-3` / `hy_1.5`）与 minimax（`abab6.5s` / `hailuo`）、mistral 家族（`magistral` / `pixtral` / `voxtral` / `ministral`）、qwen（`qwq`）等共 **18 处漏命中**，且 0 误伤（`hypothesis` / `hybrid-1` / `hyperbolic` / `orchestral-music` / `metadata-model` 仍不命中） | `src/client/artwork.ts` · `scripts/artwork-role-match.test.mjs` |
+| **队长头像跟随路由**（[0.4.2](release-notes/v0.4.2.md)） | 队长图此前是硬编码常量 `team-lead-deepseek-v2.png`，队长换成 qwen / claude / glm 时仍请求 deepseek 那张，**随包的另外 9 张队长图永远不可达**；根因是宿主端 `team.json` 只记 `captainSessionId`、没有队长的模型路由。现建队时写入 `captainProvider` / `captainModel`，快照暴露（实时值优先），面板走与成员同一套厂商识别 | `src/client/artwork.ts` · `src/tools.ts` · `src/snapshot.ts` · `src/types.ts` |
 
 ## 安装与启用
 
@@ -97,7 +98,7 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 
 ```jsonc
 "dependencies": {
-  "dsh-agent-teams-fish": "^0.4.1"
+  "dsh-agent-teams-fish": "^0.4.2"
 }
 ```
 
@@ -158,7 +159,7 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 | `member-<role>-v2.png` | 不区分厂商的岗位通用图 | 40px · 256×256 PNG |
 | `member-<vendor>-v2.png` | 厂商通用头像（识别出厂商但岗位图缺失时兜底） | 40px · 256×256 PNG |
 | `member-<vendor>-full-v2.webp` | 厂商通用立绘高清（兜底大图） | 320px 框 · 长边 ≤2048 WebP |
-| `team-lead-<vendor>-v2.png` · `team-lead-v2.png` | 队长头像（前者优先） | 44px · 256×256 PNG |
+| `team-lead-<vendor>-v2.png` · `team-lead-v2.png` | 队长头像（前者优先；队长跟随自己的模型路由，与成员同一套厂商识别） | 44px · 256×256 PNG |
 | `team-lead-<vendor>-full-v2.webp` | 队长点开后的高清图 | 320px 框 · 1024×1024 WebP |
 | `brand-<vendor>.svg` | 头像右下角的厂商商标 | 22px · 单色内联 path |
 | `action-*-v2.png` | 未识别厂商时徽标用的活动状态图 | 22px |

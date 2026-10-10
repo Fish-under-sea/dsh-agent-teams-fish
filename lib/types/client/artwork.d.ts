@@ -42,6 +42,23 @@ export interface ResolvedMemberArtwork {
 export declare const LEAD_ART = "/plugins/dsh-agent-teams/assets/team-lead-deepseek-v2.png";
 /** Large-preview artwork for the captain; degrades to {@link LEAD_ART}. */
 export declare const LEAD_FULL_ART = "/plugins/dsh-agent-teams/assets/team-lead-deepseek-full-v2.png";
+/**
+ * Captain artwork for a model vendor.
+ *
+ * The captain is the session's own model, so its vendor comes from the team
+ * snapshot's captain route rather than from a member. An unknown or missing
+ * vendor falls back to the packaged `team-lead-deepseek-v2.png`, which the
+ * host still answers — the same degradation the member artwork uses.
+ * @param vendor - vendor token for the captain's route, when known.
+ * @returns the captain avatar URL.
+ */
+export declare function leadArtUrl(vendor: string | undefined): string;
+/**
+ * Large-preview captain artwork for a model vendor.
+ * @param vendor - vendor token for the captain's route, when known.
+ * @returns the captain HD preview URL; degrades to the avatar art when absent.
+ */
+export declare function leadFullArtUrl(vendor: string | undefined): string;
 /** Status action artwork per member activity. */
 export declare const ACTION_ART: Record<'working' | 'idle' | 'unknown', string>;
 /**

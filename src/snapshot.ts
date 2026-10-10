@@ -9,9 +9,10 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import type { SessionId } from '@deepseek-ai/dsh-session'
 import { readdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { memberActivity } from './members.ts'
+import { captainRouteOf, memberActivity } from './members.ts'
 import {
   CAPTAIN_KEY, listArchivedTeamIds, readArchivedTeam, readUnreadMailbox, readTeam,
   taskDepthsById, taskVisualState,
@@ -70,6 +71,13 @@ export interface TeamActivitySnapshot {
   readonly name: string
   readonly description?: string
   readonly captainSessionId: string
+  /**
+   * The captain's model route, so the panel can pick the captain's vendor
+   * artwork the same way it does for members. Empty when the host could not
+   * resolve it, in which case the client keeps the packaged fallback.
+   */
+  readonly captainProvider: string
+  readonly captainModel: string
   readonly phase: 'staged' | 'running'
   readonly planReviewState?: 'awaiting_review' | 'awaiting_feedback'
   readonly halted?: boolean
@@ -165,12 +173,21 @@ export async function assembleTeamSnapshot(
     }
   })
   const captainInbox = await readUnreadMailbox(stateRoot, state.id, CAPTAIN_KEY)
+  // The captain's live route wins over the durable snapshot: a user who
+  // switches the session model mid-team should see the captain art follow,
+  // while a cold/absent session still answers from what creation recorded.
+  const liveCaptain = ctx.agents.get(state.captainSessionId as SessionId)
+  const liveRoute = liveCaptain === undefined ? undefined : captainRouteOf(liveCaptain)
+  const captainProvider = liveRoute?.captainProvider ?? state.captainProvider ?? ''
+  const captainModel = liveRoute?.captainModel ?? state.captainModel ?? ''
   return {
     workspace,
     teamId: state.id,
     name: state.name,
     ...state.description !== undefined ? { description: state.description } : {},
     captainSessionId: state.captainSessionId,
+    captainProvider,
+    captainModel,
     phase: state.phase ?? 'running',
     ...state.phase === 'staged'
       ? { planReviewState: state.planReviewState ?? 'awaiting_review' as const }

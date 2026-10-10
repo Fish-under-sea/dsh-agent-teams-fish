@@ -49,6 +49,9 @@ export interface ActivityTeam {
   readonly name: string
   readonly description?: string
   readonly captainSessionId: string
+  /** The captain's model route, for the captain's vendor artwork. */
+  readonly captainProvider?: string
+  readonly captainModel?: string
   readonly phase: 'staged' | 'running'
   readonly planReviewState?: 'awaiting_review' | 'awaiting_feedback'
   readonly halted?: boolean

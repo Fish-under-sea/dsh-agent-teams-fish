@@ -842,6 +842,8 @@ function isTeamState(value: unknown, expectedId: string): value is TeamState {
     && (value['profile'] === undefined || isTeamProfileSnapshot(value['profile']))
     && typeof value['captainSessionId'] === 'string'
     && value['captainSessionId'] !== ''
+    && isOptionalString(value['captainProvider'])
+    && isOptionalString(value['captainModel'])
     && isFiniteNumber(value['createdAt'])
     && Array.isArray(value['members'])
     && value['members'].every(isTeamMember)

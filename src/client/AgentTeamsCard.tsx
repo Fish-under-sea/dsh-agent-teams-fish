@@ -19,7 +19,7 @@ import {
   subscribeActivitySnapshots,
 } from './activity-monitor.ts'
 import type { AgentTeamsCardData } from './agent-teams-card-definition.ts'
-import { LEAD_ART, resolveMemberArtwork, vendorSlug } from './artwork.ts'
+import { leadArtUrl, resolveMemberArtwork, vendorSlug } from './artwork.ts'
 import css from './AgentTeamsCard.module.css'
 
 /** Member avatar with broken-image fallback to the initial-letter badge. */
@@ -96,6 +96,8 @@ export function AgentTeamsSummary({ data, openMember, sessionId, t }: AgentTeams
   const resolved = useMemo<AgentTeamsCardData>(() => ({
     ...data,
     captainSessionId: snapshot?.captainSessionId ?? owner,
+    captainProvider: snapshot?.captainProvider ?? data.captainProvider,
+    captainModel: snapshot?.captainModel ?? data.captainModel,
     teamName: snapshot?.name ?? data.teamName,
     members: snapshot?.members.map((member) => ({
       id: member.id,
@@ -108,7 +110,7 @@ export function AgentTeamsSummary({ data, openMember, sessionId, t }: AgentTeams
   return (
     <section className={css.root} data-agent-teams-card data-team-id={resolved.teamId}>
       <header className={css.head}>
-        <img className={css.leadAvatar} src={LEAD_ART} alt="" aria-hidden />
+        <img className={css.leadAvatar} src={leadArtUrl(vendorSlug({ provider: resolved.captainProvider, model: resolved.captainModel }))} alt="" aria-hidden />
         <span className={css.teamName} title={resolved.teamName}>{resolved.teamName}</span>
         <span className={css.memberCount}>{t('card.memberCount', { count: resolved.members.length })}</span>
         <button

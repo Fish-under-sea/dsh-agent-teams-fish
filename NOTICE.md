@@ -24,7 +24,7 @@
 3. **厂商识别** —— 从成员的 `provider + model` 路由推断厂商
 4. **厂商商标徽标** —— 头像右下角徽标换成 `brand-<vendor>.svg`，缺失时回落活动状态图
 5. **点击放大预览** —— 320px 大图，Esc / 点背景关闭
-6. **队长头像覆盖** —— `team-lead-<vendor>-v2.png` 优先、`team-lead-v2.png` 兜底，并改请求全新 URL 规避浏览器缓存
+6. **队长头像跟随路由**（2026-10-10 修）—— 原实现把队长图写死成 `team-lead-deepseek-v2.png`，队长换成 qwen / claude / glm 时仍请求 deepseek 那张，随包的另外 9 张队长图永远不可达。现改为建队时把队长的 `provider`/`model` 写进 `team.json`（`captainProvider` / `captainModel`），面板按与成员同一套厂商识别请求 `team-lead-<vendor>-v2.png`；识别不出厂商时回落 `team-lead-v2.png`，并继续改请求全新 URL 规避浏览器缓存
 7. **缓存策略收紧** —— 配置了 `artworkDir` 时美术资源一律 `no-store`
 8. **路由链单测** —— `scripts/custom-artwork.test.mjs`〔新增〕20 条
 9. **厂商素材随包分发**（0.3.1）—— 108 张厂商素材进 `assets/agent-teams/`，附导入脚本 `scripts/import-vendor-artwork.mjs`；`pnpm verify` 新增厂商整套与尺寸门禁
