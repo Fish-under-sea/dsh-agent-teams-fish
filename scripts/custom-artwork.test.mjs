@@ -39,14 +39,19 @@ test('every packaged slug stays servable exactly as shipped', () => {
   }
 })
 
-test('vendor namespaces cover the 15 vendors and 10 roles', () => {
-  assert.equal(ARTWORK_VENDORS.length, 15)
+test('vendor namespaces cover the 17 vendors and 10 roles', () => {
+  assert.equal(ARTWORK_VENDORS.length, 17)
   assert.equal(ARTWORK_ROLES.length, 10)
   assert.ok(ARTWORK_VENDORS.includes('deepseek'))
   assert.ok(ARTWORK_VENDORS.includes('hunyuan'))
   // 2026-10-08：第二轮素材新增的 6 个厂商；前 10 个有厂商 × 岗位图，这 6 个里只有
   // minimax 有，其余沿厂商通用图兜底。
   for (const vendor of ['minimax', 'meta', 'mistral', 'rwkv', 'seed', 'ernie']) {
+    assert.ok(ARTWORK_VENDORS.includes(vendor), `${vendor} 必须在厂商表里`)
+  }
+  // 2026-10-11：第三轮素材新增 stepfun / jev —— 两个都只有厂商通用图与立绘，
+  // 岗位请求沿 `member-<vendor>-v2.png` 兜底（与 meta / rwkv 等同一档）。
+  for (const vendor of ['stepfun', 'jev']) {
     assert.ok(ARTWORK_VENDORS.includes(vendor), `${vendor} 必须在厂商表里`)
   }
   assert.ok(ARTWORK_ROLES.includes('operator'))

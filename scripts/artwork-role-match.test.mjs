@@ -95,6 +95,21 @@ const VENDOR_CASES = [
   { provider: 'mistral', model: 'pixtral-large-2411', expected: 'mistral' },
   { provider: 'mistral', model: 'voxtral-mini-2507', expected: 'mistral' },
   { provider: 'mistral', model: 'ministral-8b', expected: 'mistral' },
+  // 2026-10-11：第三轮素材新增 2 个厂商（stepfun / jev），命名空间 15 → 17。
+  // stepfun 必须同时认三种口径：provider 名（stepfun）、模型家族的
+  // `step-<数字>`（本机 S1 / S2 / S3 三条路由的 model 是 `step-5-preview`，
+  // provider 段里根本没有 stepfun 字样）、以及中文「阶跃」。
+  { provider: 'stepfun', model: 'step-5-preview', expected: 'stepfun' },
+  { provider: 'cn-f/cline/cline-free', model: 'step-5-preview', expected: 'stepfun' },
+  { provider: 'cn-f/our-free-model', model: 'step-5-preview-free', expected: 'stepfun' },
+  { provider: 'stepfun', model: 'step-3', expected: 'stepfun' },
+  { provider: 'stepfun', model: 'step1', expected: 'stepfun' },
+  { provider: 'stepfun', model: '阶跃星辰', expected: 'stepfun' },
+  // jev 认 provider 段（typesafe）与模型名两处；`type-safe` 变体同样要认。
+  { provider: 'en-f/cline/typesafe', model: 'jev-router', expected: 'jev' },
+  { provider: 'typesafe', model: 'jev-router', expected: 'jev' },
+  { provider: 'type-safe', model: 'system-one', expected: 'jev' },
+  { provider: 'cline', model: 'jev', expected: 'jev' },
 ]
 
 test('8 个成员岗位正例命中正确 role token', () => {
@@ -141,6 +156,52 @@ test('放宽 hy / stral 后仍不吞无关词（provider 与 model 两侧都验�
   // provider 叫 hyperbolic（真实存在的推理服务商）时，仍按 model 判厂商。
   assert.equal(vendorSlug({ provider: 'hyperbolic', model: 'meta-llama/Llama-3.3-70B' }), 'meta')
   assert.equal(vendorSlug({ provider: 'hyperbolic', model: 'hy3' }), 'hunyuan')
+})
+
+/**
+ * 新增厂商不得吞掉既有厂商，也不得被别的厂商吞掉。
+ *
+ * `step` 家族与 `jev` 都是短词，容易与既有规则相撞：
+ *  - `\bstep` 会不会把 `mistral` 系的别的词吞进来？
+ *  - `jev` 不加尾部边界时会不会吞掉 `Jevons` 之类？
+ *  - `stepfun` 必须排在 `seed` 之前吗？（`step-5-preview` 里没有 seed 关键词，不需要）
+ * 这里逐条钉住优先级与边界。
+ */
+test('新增 stepfun / jev 的识别边界与优先级', () => {
+  // 正向：两种口径都要认（provider 段与 model 段）
+  assert.equal(vendorSlug({ provider: 'stepfun', model: 'step-5-preview' }), 'stepfun')
+  assert.equal(vendorSlug({ provider: 'unknown', model: 'step-5-preview' }), 'stepfun')
+  assert.equal(vendorSlug({ provider: 'typesafe', model: 'jev-router' }), 'jev')
+  assert.equal(vendorSlug({ provider: 'unknown', model: 'jev-router' }), 'jev')
+
+  // 负向：含 step / jev 的无关词不得误命中
+  for (const model of ['stepstone', 'jevenile', 'jevons', 'stepper-motor', 'footsteps']) {
+    assert.equal(vendorSlug({ provider: 'some', model }), undefined, `${model} 不应被误识别`)
+  }
+  // `step` 家族必须带分隔或数字，不能裸 `\bstep\w*`
+  assert.equal(vendorSlug({ provider: 'some', model: 'stepper' }), undefined)
+  assert.equal(vendorSlug({ provider: 'some', model: 'steps' }), undefined)
+
+  // 既有厂商不被新规则抢走
+  assert.equal(vendorSlug({ provider: 'mistral', model: 'magistral-small-2509' }), 'mistral')
+  assert.equal(vendorSlug({ provider: 'atria', model: 'glm-5.3' }), 'glm')
+  assert.equal(vendorSlug({ provider: 'stepfun', model: 'step-5-preview' }), 'stepfun')
+})
+
+/**
+ * 新增厂商的队长图与商标必须登记进宿主白名单。
+ *
+ * 队长图的 vendor token 直接来自 `artworkCandidates` 的 `ARTWORK_VENDORS`
+ * 判定：漏登记的 token 会让 `leadArtUrl('<vendor>')` 回落到 deepseek 那张，
+ * 面板看上去「队长头像没跟随路由」—— 与 0.4.2 修掉的病根同一类。
+ */
+test('新增厂商在客户端与宿主两半的 token 完全一致', () => {
+  for (const vendor of ['stepfun', 'jev']) {
+    assert.equal(vendorSlug({ model: vendor }), vendor, `${vendor} 必须能被自己的 token 命中`)
+    assert.equal(leadArtUrl(vendor).endsWith(`team-lead-${vendor}-v2.png`), true,
+      `${vendor} 的队长图必须跟随自己的 token`)
+    assert.equal(leadFullArtUrl(vendor).endsWith(`team-lead-${vendor}-full-v2.png`), true)
+  }
 })
 
 test('resolveMemberArtwork：命中岗位 + 厂商 → 岗位-厂商组合图', () => {

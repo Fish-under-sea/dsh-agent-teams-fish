@@ -16,7 +16,18 @@
 
 ---
 
-十五个厂商 × 十个岗位的头像、十五个厂商商标徽标**随包自带** —— 装上就有；想换画风仍是一个自定义目录的事，不改一行动画代码。
+> **🆕 0.5.0（2026-10-11）**：厂商命名空间 **15 → 17**，新增 **StepFun（阶跃星辰）** 与 **Jev（TypeSafe System One）**。
+>
+> - **档位**：两家都只有「厂商通用图 + 立绘高清」这一档，与既有的 `meta` / `mistral` / `rwkv` / `seed` / `ernie` 同档。成员请求 `member-<vendor>-<role>-v2.png` 时，降级链第 1 跳落空、第 2 跳命中**岗位通用图** —— 头像照常显示，**不会破图**。
+> - **识别规则**：`stepfun` 同时认 provider 名、`step-<数字>` 模型族与中文「阶跃」。模型族那一条是必需的：本机三条真实路由是 `cn-f/cline/cline-free/step-5-preview` 这类，**provider 段里根本没有 stepfun 字样**，只认 provider 名会让整队掉兜底头像（与 [0.4.1](release-notes/v0.4.1.md) 修过的 `hunyuan3` 是同一类病根）。`jev` 认 `jev` / `typesafe` / `type-safe`。
+> - **边界**：两者都保留词边界，`stepper` / `steps` / `stepstone` / `jevons` / `jevenile` 一类普通英文词不会被误吞（有单测钉住）。
+> - **素材**：新增 6 个文件（2 张 256×256 RGBA 头像 + 2 张 alpha WebP 立绘高清 + 2 个商标 SVG），素材目录 **280 → 286 个文件**。
+> - ⚠️ **`brand-jev.svg` 是占位字标，不是官方商标**：TypeSafe / Jev 目前没有公开商标（simple-icons 与 LobeHub icons 均无收录），所以按既有归一化口径（墨迹框最大边缩到 0.84×24、居中）做了一个简洁的「J」字标并注入品牌色。**拿到官方商标后直接替换该文件即可**，命名与尺寸口径都不用动。
+> - **为什么走 minor**：`ARTWORK_VENDORS.length` 是仓库门禁硬断言的契约值（15 是写死的），改成 17 属行为变更，不是补丁。
+
+---
+
+十七个厂商 × 十个岗位的头像、十七个厂商商标徽标**随包自带** —— 装上就有；想换画风仍是一个自定义目录的事，不改一行动画代码。
 
 ## 目录
 
@@ -81,7 +92,8 @@
 | 中英双语 README（[0.4.0](release-notes/v0.4.0.md)） | 新增 [`README.en.md`](README.en.md) 英文对照版，章节与中文版一一对应 | `README.md` · `README.en.md` |
 | **厂商识别细化 + 两处系统性修复**（[0.4.1](release-notes/v0.4.1.md)） | ① 尾随 `\b` 卡住「名字 + 数字」的 id：`hunyuan3` / `rwkv7` / `seed1.6` / `abab6.5s` / `chatglm3-6b` 全都匹配不上；② **`\b` 对 CJK 永远不成立**（JS 的 `\w` 只含 ASCII），中文别名「混元 / 通义 / 智谱 / 豆包 / 文心 / 千帆」此前**全是死分支**。本次补齐混元 `hy` 家族（`hy3` / `hy-3` / `hy_1.5`）与 minimax（`abab6.5s` / `hailuo`）、mistral 家族（`magistral` / `pixtral` / `voxtral` / `ministral`）、qwen（`qwq`）等共 **18 处漏命中**，且 0 误伤（`hypothesis` / `hybrid-1` / `hyperbolic` / `orchestral-music` / `metadata-model` 仍不命中） | `src/client/artwork.ts` · `scripts/artwork-role-match.test.mjs` |
 | **队长头像跟随路由**（[0.4.2](release-notes/v0.4.2.md)） | 队长图此前是硬编码常量 `team-lead-deepseek-v2.png`，队长换成 qwen / claude / glm 时仍请求 deepseek 那张，**随包的另外 9 张队长图永远不可达**；根因是宿主端 `team.json` 只记 `captainSessionId`、没有队长的模型路由。现建队时写入 `captainProvider` / `captainModel`，快照暴露（实时值优先），面板走与成员同一套厂商识别 | `src/client/artwork.ts` · `src/tools.ts` · `src/snapshot.ts` · `src/types.ts` |
-| **README 矛盾行修正**（[0.4.3](release-notes/v0.4.3.md)） | [0.4.2](release-notes/v0.4.2.md) 发布时漏改「已知限制」表里的「队长不跟随模型路由」，导致同一份 README 里新旧两种说法并存。**npm 包内 README 在发布时冻结、事后无法修改**，故补发 0.4.3 把正确文案带上 npm；功能与 [0.4.2](release-notes/v0.4.2.md) 完全一致，仅为文档修正 | `README.md` · `README.en.md` |
+| **README 矛盾行修正**（[0.4.3](release-notes/v0.4.3.md)） | [0.4.2](release-notes/v0.4.2.md) 发布时漏改「已知限制」表里的「队长不跟随模型路由」，导致同一份 README 里新旧两种说法并存。**npm 包内 README 在发布时冻结、事后无法修改**，故补发 [0.4.3](release-notes/v0.4.3.md) 把正确文案带上 npm；功能与 [0.4.2](release-notes/v0.4.2.md) 完全一致，仅为文档修正 | `README.md` · `README.en.md` |
+| **第三轮厂商素材**（[0.5.0](release-notes/v0.5.0.md)） | 厂商命名空间 15 → 17，新增 **StepFun（阶跃星辰）** 与 **Jev（TypeSafe System One）**，两者均落「只有通用图 + 立绘」档（与 `meta` / `rwkv` 等同档，岗位请求走降级链兜底）。`stepfun` 识别同时认 provider 名、`step-<数字>` 模型族与中文「阶跃」——**模型族那一条是必需的**，本机三条 Step 路由的 provider 段里没有 stepfun 字样，只认 provider 会整队掉兜底（与 [0.4.1](release-notes/v0.4.1.md) 修过的「名字 + 数字」病根同类）；`jev` 认 `jev` / `typesafe` / `type-safe`，两者都保留词边界 | `src/client/artwork.ts` · `src/artwork-source.ts` · `assets/agent-teams/` · `scripts/verify.mjs` |
 
 ## 安装与启用
 
@@ -99,7 +111,7 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 
 ```jsonc
 "dependencies": {
-  "dsh-agent-teams-fish": "^0.4.3"
+  "dsh-agent-teams-fish": "^0.5.0"
 }
 ```
 
@@ -136,7 +148,7 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
       config:
         stateDir: .agent-teams
         memberProvider: spawn
-        # 可选：一个目录即可整套覆盖随包素材（不配就用包内 15 厂商素材）
+        # 可选：一个目录即可整套覆盖随包素材（不配就用包内 17 厂商素材）
         artworkDir: <你的美术目录绝对路径>
 ```
 
@@ -165,7 +177,7 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 | `brand-<vendor>.svg` | 头像右下角的厂商商标 | 22px · 单色内联 path |
 | `action-*-v2.png` | 未识别厂商时徽标用的活动状态图 | 22px |
 
-- **厂商 token（15）**：`deepseek` `qwen` `glm` `kimi` `claude` `gemini` `grok` `gpt` `hunyuan` `minimax` `meta` `mistral` `rwkv` `seed` `ernie`
+- **厂商 token（17）**：`deepseek` `qwen` `glm` `kimi` `claude` `gemini` `grok` `gpt` `hunyuan` `minimax` `meta` `mistral` `rwkv` `seed` `ernie` `stepfun` `jev`
 - **岗位 token（10）**：`engineer` `qa` `security` `researcher` `designer` `docs` `data` `operator` `audio` `video`（队长单列）
 - 自定义目录里的文件名可省略 `-v2`；扩展名优先级 `.png` `.webp` `.jpg` `.jpeg` `.gif` `.svg`
 - **客户端请求的永远是 `.png` 名字**（`member-…-v2.png` / `…-full-v2.png`）；`member-` / `team-lead-` 两个族的候选名会**按上表顺序探测扩展名**，所以随包的 `.webp` 高清图能直接应答 `.png` 请求。商标（`brand-…svg` → `brand-…png` → `brand.svg` → `brand.png`）与活动状态图保持严格候选名。
@@ -174,21 +186,21 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 
 ### 随包素材（[0.3.1](release-notes/v0.3.1.md) 起；厂商素材于 2026-10-08 换成新一批并加入高清族）
 
-`assets/agent-teams/` 共 **280 个文件 / 约 28.6 MB**：15 张内置鲸鱼基线（队长 / 8 岗位 / 6 动作）+ **265 张厂商素材**。
+`assets/agent-teams/` 共 **286 个文件 / 约 29.3 MB**：15 张内置鲸鱼基线（队长 / 8 岗位 / 6 动作）+ **271 张厂商素材**。
 
 | 族 | 数量 | 规格 |
 |----|:---:|------|
 | `member-<vendor>-<role>-v2.png` | 10 × 10 = 100 | 256×256 8-bit RGBA |
 | `member-<vendor>-<role>-full-v2.webp` | 10 × 10 = 100 | 1024×1024 RGBA WebP |
-| `member-<vendor>-v2.png` | 15 | 256×256 8-bit RGBA |
-| `member-<vendor>-full-v2.webp` | 15 | 竖幅，长边 1897–2048 |
+| `member-<vendor>-v2.png` | 17 | 256×256 8-bit RGBA |
+| `member-<vendor>-full-v2.webp` | 17 | 竖幅，长边 1897–2048 |
 | `team-lead-<vendor>-v2.png` | 10 | 256×256 8-bit RGBA |
 | `team-lead-<vendor>-full-v2.webp` | 10 | 1024×1024 RGBA WebP |
-| `brand-<vendor>.svg` | 15 | 内联 path、离线自洽（无外链、无脚本） |
+| `brand-<vendor>.svg` | 17 | 内联 path、离线自洽（无外链、无脚本） |
 
-> 厂商素材分两档：`deepseek` `qwen` `glm` `kimi` `claude` `gemini` `grok` `gpt` `hunyuan` `minimax` 这 10 个有「厂商 × 岗位」全套图（头像 + 高清）与队长图；`meta` `mistral` `rwkv` `seed` `ernie` 只有厂商通用头像与立绘高清，岗位请求沿 `member-<vendor>-v2.png` 兜底（降级链第 3 跳，不会 404）。
+> 厂商素材分两档：`deepseek` `qwen` `glm` `kimi` `claude` `gemini` `grok` `gpt` `hunyuan` `minimax` 这 10 个有「厂商 × 岗位」全套图（头像 + 高清）与队长图；`meta` `mistral` `rwkv` `seed` `ernie` `stepfun` `jev` 这 7 个只有厂商通用头像与立绘高清，岗位请求沿 `member-<vendor>-v2.png` 兜底（降级链第 3 跳，不会 404）。
 
-> ⚠️ **内置目录只认候选链里的名字（带 `-v2`）**：`artworkDir` 里的 `member-qwen-qa.png` 能靠别名回退命中，但包内目录不做这层别名回退。所以导入脚本会统一补 `-v2` —— 手工把不带后缀的文件复制进包，会出现「文件明明在包里，请求却永远落空」。`pnpm verify` 现在逐条断言这 265 张与它们的尺寸、格式（含两族的编码与 alpha）。
+> ⚠️ **内置目录只认候选链里的名字（带 `-v2`）**：`artworkDir` 里的 `member-qwen-qa.png` 能靠别名回退命中，但包内目录不做这层别名回退。所以导入脚本会统一补 `-v2` —— 手工把不带后缀的文件复制进包，会出现「文件明明在包里，请求却永远落空」。`pnpm verify` 现在逐条断言这 271 张与它们的尺寸、格式（含两族的编码与 alpha）。
 
 ### 降级链（不会出现破图）
 
@@ -215,7 +227,12 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 | `claude` | claude / anthropic | `minimax` | minimax / mini-max / abab |
 | `meta` | meta / llama | `mistral` | mistral\* / mixtral / codestral / devstral |
 | `rwkv` | rwkv | `seed` | seed / doubao / 豆包 / bytedance / volcengine / volces |
-| `ernie` | ern\* / wenxin / 文心 / baidu / qianfan / 千帆 | | |
+| `ernie` | ern\* / wenxin / 文心 / baidu / qianfan / 千帆 | `stepfun` | stepfun / `step-<数字>` / 阶跃 |
+| `jev` | jev / typesafe / type-safe | | |
+
+> **`stepfun` 为什么必须认模型族**：本机三条 Step 路由的 provider 段是 `cn-f/cline/cline-free` 这类（见 [模型配置清单](../模型配置清单.md) 的 S1 / S2 / S3），**没有一个字母是 stepfun**，而 model 是 `step-5-preview`。只按 provider 名匹配会让整队掉兜底头像 —— 与 [0.4.1](release-notes/v0.4.1.md) 修掉的 `hunyuan3` / `rwkv7` / `seed1.6` 是同一类病根（名字后面跟数字时旧规则匹配不上）。
+>
+> 两者都保留词边界：`stepper` / `steps` / `stepstone` / `jevons` / `jevenile` 不会被误吞，有单测钉住。
 
 ### 制作流水线（本版美术怎么来的）
 
@@ -229,6 +246,8 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 | **2026-10-08 换图** | 厂商通用图 / 立绘 ← 15 张全身立绘；厂商 × 岗位图与队长图 ← 10 个厂商 × 11 张 Q 版立绘。同一套去背口径，另加两步：5×5 盒式模糊抹平 JPEG 噪点后再洪水填充、连通域去斑（小于万分之零点五的孤立前景判为噪点）—— MJPG 源的白底杂斑曾把墨迹框撑到满幅 |
 | **徽标补齐** | 新增 6 个厂商的商标：simple-icons（`minimax` / `meta` / `mistralai`）+ LobeHub icons（`rwkv` / `bytedance` / `wenxin`）→ 单色 path + 厂商品牌色 → 与既有 9 个用**同一个**归一化目标框（墨迹框最大边缩到 0.84×24、居中；既有 9 个实测中位残差 0.026） |
 | **2026-10-08 高清族** | 列表小图仍是 256 PNG；点开的高清图**直接用去背后的原分辨率画面**：岗位/队长放在 1024×1024 画布上按 **1:1 原生像素居中**（不重采样、不放大），厂商立绘按**长边 ≤2048** 面积平均缩放。全部编成 **WebP `-quality 92`**（`-pixel_format rgba`、带 alpha），整套 125 张合计 19 MB；PNG 同分辨率会到 125 MB。原 512 PNG 立绘被高清 WebP 取代 —— 同名族的扩展名优先级是 `.png` 优先，留着 PNG 会让高清永远轮不到 |
+| **2026-10-11 第三轮（stepfun / jev）** | 厂商通用图 / 立绘 ← 2 张 1152×2048 白底全身立绘，走**同一套**去背口径（四边连通洪水填充阈值 238 + 边缘收缩 1px → 裁到实心包围盒）。256 头像是立绘的等比缩小版：缩到高度 **254px**、水平居中贴进 256×256 透明画布（实测既有素材的墨迹高为 246–255）；立绘高清长边 ≤2048、编成 WebP `-quality 92` 带 alpha。**本次没有 Q 版岗位图**，故两家都落在通用档 |
+| **`brand-jev.svg` 是占位字标** | TypeSafe / Jev 无公开商标（simple-icons 与 LobeHub icons 均 404），故按既有归一化口径自制一个「J」字标（墨迹框最大边缩到 0.84×24、居中）。**不是官方商标**，拿到官方素材后直接替换同名文件即可。`brand-stepfun.svg` 取自 LobeHub icons 的官方单色 path + 品牌色 |
 
 ## 开发与测试
 
@@ -260,7 +279,7 @@ dsh-agent-teams-fish/
 │   ├── custom-artwork.test.mjs          【本版新增】20 条路由链单测（含包内扩展名探测）
 │   └── import-vendor-artwork.mjs        【随包新增】厂商素材导入（补 -v2 后缀，跳过占位图）
 ├── lib/                                 构建产物（随仓库跟踪，DSH 实际加载的就是它）
-├── assets/                              素材（15 张内置鲸鱼图 + 265 张厂商素材〔含高清 WebP〕+ readme/hero.svg）
+├── assets/                              素材（15 张内置鲸鱼图 + 271 张厂商素材〔含高清 WebP〕+ readme/hero.svg）
 ├── README.md                            本文件（本版重写）
 ├── README.en.md                         英文对照版
 ├── README.original.md                   上游英文 README（原样保留）

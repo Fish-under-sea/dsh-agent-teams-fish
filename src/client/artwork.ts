@@ -81,6 +81,22 @@ const VENDOR_ART: ReadonlyArray<readonly [RegExp, string]> = [
   [/\brwkv[\w.-]*/, 'rwkv'],
   [/\bseed[\w.-]*|\bdoubao[\w.-]*|\bbytedance\b|\bvolcengine\b|\bvolces\b|豆包/, 'seed'],
   [/\bern[\w.-]*|\bwenxin[\w.-]*|\bbaidu\b|\bqianfan\b|文心|千帆/, 'ernie'],
+  // 2026-10-11：第三轮素材新增的 2 个厂商。追加在表尾，既有 token 的命中优先级不变。
+  //
+  // stepfun（阶跃星辰）必须认三种口径，缺一都会掉兜底：
+  //   1. provider 名 `stepfun`；
+  //   2. 模型家族的 `step-<数字>` / `step_<数字>` / `step<数字>` —— 本机三条路由
+  //      （cn-f/cline/cline-free/step-5-preview 等）的 provider 段里根本没有
+  //      stepfun 字样，只靠第 1 条会整队掉兜底；
+  //   3. 中文「阶跃」。
+  // 刻意**不**写成裸 `\bstep[\w.-]*`：那会把 `stepper` / `steps` / `stepstone`
+  // 一类普通英文词吞成阶跃。`step` 后面必须跟分隔符或数字。
+  [/\bstepfun[\w.-]*|\bstep[-_.]?\d[\w.-]*|阶跃/, 'stepfun'],
+  // jev（TypeSafe 的 System One 模型）同理认 provider 段与模型名两处：
+  // `en-f/cline/typesafe` + `jev-router` 是本机真实路由，任一侧命中即可。
+  // `type-safe` 变体一并收进，避免中间带连字符时漏命中。
+  // `jev` 保留尾部边界：否则 `jevons` / `jevenile` 这类词会被误吞。
+  [/\bjev\b|\btypesafe\b|\btype-safe\b/, 'jev'],
 ]
 
 /** Chinese label map for role tokens.

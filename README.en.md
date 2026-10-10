@@ -16,7 +16,16 @@
 
 ---
 
-Fifteen vendors × ten role avatars and fifteen vendor brand marks **ship inside the package** — they work out of the box; swapping the entire art style is still just one custom directory away, with zero changes to animation code.
+> **🆕 0.5.0 (2026-10-11)**: vendor namespace **15 → 17**, adding **StepFun** and **Jev** (TypeSafe System One).
+>
+> - **Tier**: both ship only a generic vendor portrait + HD portrait — the same tier as `meta` / `mistral` / `rwkv` / `seed` / `ernie`. A member request for `member-<vendor>-<role>-v2.png` misses hop 1 and lands on the **role-generic** image at hop 2, so avatars keep rendering with no broken images.
+> - **Recognition**: `stepfun` matches the provider name, the `step-<digit>` model family, and 阶跃. The model-family clause is required: this machine's real routes are `cn-f/cline/cline-free/step-5-preview`-style, whose **provider segment never contains "stepfun"** — matching the provider alone drops the whole team to fallback art (the same class of defect fixed for `hunyuan3` in [0.4.1](release-notes/v0.4.1.md)). `jev` matches `jev` / `typesafe` / `type-safe`.
+> - **Boundaries**: both keep word boundaries, so `stepper` / `steps` / `stepstone` / `jevons` / `jevenile` are not swallowed (pinned by unit tests).
+> - **Assets**: 6 new files (2 × 256×256 RGBA avatars, 2 × alpha WebP HD portraits, 2 brand SVGs); the asset directory goes **280 → 286 files**.
+> - ⚠️ **`brand-jev.svg` is a placeholder monogram, not an official mark**: TypeSafe / Jev has no public logo (neither simple-icons nor LobeHub icons carries one), so a minimal "J" mark was drawn under the existing normalization contract. **Replace that file once an official mark exists** — the name and size contract stay the same.
+
+---
+Seventeen vendors × ten role avatars and seventeen vendor brand marks **ship inside the package** — they work out of the box; swapping the entire art style is still just one custom directory away, with zero changes to animation code.
 
 ## Table of Contents
 
@@ -99,7 +108,7 @@ You can also add it manually to `profiles/<profile>/package.json`:
 
 ```jsonc
 "dependencies": {
-  "dsh-agent-teams-fish": "^0.4.3"
+  "dsh-agent-teams-fish": "^0.5.0"
 }
 ```
 
@@ -165,7 +174,7 @@ Enable the plugin in `profiles/<profile>/cordis.patch.yml`. Vendor assets alread
 | `brand-<vendor>.svg` | Vendor brand mark in the avatar corner | 22px · monochrome inline path |
 | `action-*-v2.png` | Activity state image for the badge when vendor is unrecognized | 22px |
 
-- **Vendor tokens (15)**: `deepseek` `qwen` `glm` `kimi` `claude` `gemini` `grok` `gpt` `hunyuan` `minimax` `meta` `mistral` `rwkv` `seed` `ernie`
+- **Vendor tokens (17)**: `deepseek` `qwen` `glm` `kimi` `claude` `gemini` `grok` `gpt` `hunyuan` `minimax` `meta` `mistral` `rwkv` `seed` `ernie` `stepfun` `jev`
 - **Role tokens (10)**: `engineer` `qa` `security` `researcher` `designer` `docs` `data` `operator` `audio` `video` (captain is separate)
 - Custom directory filenames may omit the `-v2` suffix; extension priority: `.png` `.webp` `.jpg` `.jpeg` `.gif` `.svg`
 - **The client always requests `.png` names** (`member-…-v2.png` / `…-full-v2.png`); the `member-` and `team-lead-` families **probe extensions in order** (as listed above), so the packaged `.webp` HD images can directly answer `.png` requests. Brand marks (`brand-…svg` → `brand-…png` → `brand.svg` → `brand.png`) and activity images keep strict candidate names.
@@ -174,7 +183,7 @@ Enable the plugin in `profiles/<profile>/cordis.patch.yml`. Vendor assets alread
 
 ### Packaged Assets (since [0.3.1](release-notes/v0.3.1.md); vendor assets refreshed on 2026-10-08 with HD family added)
 
-`assets/agent-teams/` contains **280 files / ~28.6 MB**: 15 built-in whale baselines (captain / 8 roles / 6 actions) + **265 vendor assets**.
+`assets/agent-teams/` contains **286 files / ~29.3 MB**: 15 built-in whale baselines (captain / 8 roles / 6 actions) + **271 vendor assets**.
 
 | Family | Count | Spec |
 |--------|:-----:|------|
@@ -188,7 +197,7 @@ Enable the plugin in `profiles/<profile>/cordis.patch.yml`. Vendor assets alread
 
 > Vendor assets come in two tiers: `deepseek` `qwen` `glm` `kimi` `claude` `gemini` `grok` `gpt` `hunyuan` `minimax` — these 10 have full "vendor × role" sets (avatars + HD) and captain art; `meta` `mistral` `rwkv` `seed` `ernie` have only vendor-generic avatars and HD portraits — role requests fall back through `member-<vendor>-v2.png` (the 3rd hop in the degradation chain, never 404s).
 
-> ⚠️ **The packaged directory only recognizes names in the candidate chain (with `-v2`)**: `member-qwen-qa.png` in `artworkDir` can hit via alias fallback, but the packaged directory does not perform this alias fallback. The import script uniformly adds `-v2` — manually copying files without the suffix into the package causes "the file is clearly there, but the request always misses." `pnpm verify` now asserts all 265 files with their dimensions and formats (including encoding and alpha for both families).
+> ⚠️ **The packaged directory only recognizes names in the candidate chain (with `-v2`)**: `member-qwen-qa.png` in `artworkDir` can hit via alias fallback, but the packaged directory does not perform this alias fallback. The import script uniformly adds `-v2` — manually copying files without the suffix into the package causes "the file is clearly there, but the request always misses." `pnpm verify` now asserts all 271 files with their dimensions and formats (including encoding and alpha for both families).
 
 ### Degradation Chain (no broken images)
 
@@ -260,7 +269,7 @@ dsh-agent-teams-fish/
 │   ├── custom-artwork.test.mjs          [New in this fork] 20 route-chain unit tests (including packaged extension probing)
 │   └── import-vendor-artwork.mjs        [New in package] Vendor asset import (adds -v2 suffix, skips placeholders)
 ├── lib/                                 Build output (tracked in repo; what DSH actually loads)
-├── assets/                              Art (15 built-in whale images + 265 vendor assets [including HD WebP] + readme/hero.svg)
+├── assets/                              Art (15 built-in whale images + 271 vendor assets [including HD WebP] + readme/hero.svg)
 ├── README.md                            This file (rewritten for this fork)
 ├── README.en.md                         English counterpart
 ├── README.original.md                   Upstream English README (preserved verbatim)

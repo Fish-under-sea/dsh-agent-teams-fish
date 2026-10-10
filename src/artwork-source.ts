@@ -23,6 +23,9 @@ export const ARTWORK_VENDORS: ReadonlyArray<string> = [
   // 2026-10-08：第二轮素材把厂商命名空间从 9 个扩到 15 个。前 10 个有厂商 × 岗位图，
   // 后 5 个只有厂商通用图与立绘（岗位请求沿 vendor 兜底，不会 404）。
   'minimax', 'meta', 'mistral', 'rwkv', 'seed', 'ernie',
+  // 2026-10-11：第三轮素材把命名空间从 15 个扩到 17 个。这两个同样只有厂商通用图
+  // 与立绘，岗位请求沿 vendor 兜底 —— 与 meta / mistral / rwkv / seed / ernie 同档。
+  'stepfun', 'jev',
 ]
 
 /** Role buckets the panel assigns artwork to. */
