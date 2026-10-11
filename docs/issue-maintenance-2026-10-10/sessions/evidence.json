@@ -1,0 +1,166 @@
+{
+  "group": "sessions",
+  "issues": [
+    103,
+    160,
+    176
+  ],
+  "host": "dsh 0.2.0-rc.2 (exact npm cohort), real Loader profile, model deepseek-account/deepseek-flash/max",
+  "note": "Small reviewable summary of the acceptance runs. Raw logs, session stores and model traffic stay in the group temp directory; no credentials are included.",
+  "issue176": {
+    "kind": "real host + real model fork matrix on a running team (approved, member spawned and holding an open task)",
+    "teamId": "matrix-lab-candidate-final",
+    "captainSessionId": "session-7ad1c6bc-2f21-4ff0-be1c-c08a38a747e0",
+    "forkSessionId": "session-4562f02b-164f-4954-86d5-cfa6794af5b9",
+    "grandchildSessionId": "session-6114220f-1980-4e11-a871-bc983fee1a6e",
+    "memberSessionId": "1ba3b97f-4820-4251-8a5d-e13ce5206b57",
+    "warm": {
+      "forkStatus": {
+        "rejected": false,
+        "teamResolved": true,
+        "created": false
+      },
+      "forkMutation": {
+        "rejected": false,
+        "teamResolved": true,
+        "created": true
+      }
+    },
+    "cold": {
+      "fork": {
+        "status": {
+          "rejected": false,
+          "teamResolved": true,
+          "created": true
+        },
+        "mutation": {
+          "rejected": false,
+          "teamResolved": true,
+          "created": true
+        },
+        "mutationRecorded": true
+      },
+      "grandchild": {
+        "status": {
+          "rejected": false,
+          "teamResolved": true,
+          "created": true
+        },
+        "mutation": {
+          "rejected": false,
+          "teamResolved": true,
+          "created": true
+        },
+        "mutationRecorded": true
+      },
+      "forkMemberDelivery": {
+        "memberId": "1ba3b97f-4820-4251-8a5d-e13ce5206b57",
+        "delivered": true,
+        "readOk": true
+      },
+      "memberFork": {
+        "mutation": {
+          "rejected": false,
+          "teamResolved": false,
+          "created": false
+        },
+        "mutationRecorded": false
+      },
+      "otherWorkspace": {
+        "status": {
+          "rejected": true,
+          "teamResolved": true,
+          "created": false
+        }
+      },
+      "ownership": {
+        "captainSessionId": "session-7ad1c6bc-2f21-4ff0-be1c-c08a38a747e0",
+        "unchanged": true
+      }
+    },
+    "verdict": {
+      "warmForkLeads": true,
+      "coldForkLeads": true,
+      "coldMultiLevelForkLeads": true,
+      "coldForkReachesMember": true,
+      "memberSessionGainsNoAuthority": true,
+      "otherWorkspaceRejected": true,
+      "durableOwnershipUnchanged": true
+    },
+    "pureContract": {
+      "test": "scripts/lineage-identity.test.mjs",
+      "wired": "pnpm verify:lineage-identity (also part of pnpm verify)",
+      "cases": [
+        "recorded captain leads its own team",
+        "top-level fork descendant inherits lead identity at any depth",
+        "member session never inherits lead identity (inheritsLead false, plus listed-member defence)",
+        "retired member and its fork never regain lead identity",
+        "member fork never inherits through its member ancestor",
+        "unrelated lineage neither leads nor inherits",
+        "a team without roster rows keeps the exact-id contract",
+        "only a top-level conversation may inherit lead identity"
+      ],
+      "hardening": "teamLeadMatch/sessionLeadsTeam/sessionLeadsTeamAsync now treat any listed member row as never-lead regardless of status (previously only non-removed rows were excluded); member participation still honours the removed filter in the team lookups. Confirmed by re-running the real fork matrix above after the change."
+    }
+  },
+  "issue160": {
+    "newWritePath": "src/harness-compat.ts agentTeamsSource(): producer-owned kinds on stored format >= 3, released plugin wrapper below; used by the command boundary and both member delivery paths",
+    "recoveryTool": {
+      "path": "scripts/legacy-session-source-repair.mjs",
+      "shipped": "listed in package.json#files; present in the packed tarball with a matching content hash",
+      "invocation": [
+        "repo: node scripts/legacy-session-source-repair.mjs --session-dir <session-dir> [--apply]",
+        "installed package: node node_modules/@nanmicoder/dsh-agent-teams/scripts/legacy-session-source-repair.mjs --session-dir <session-dir> [--apply]",
+        "requirement: the Harness cohort must resolve from the tool's location (@deepseek-ai/dsh-session at minimum) - a checkout's node_modules or an installed profile"
+      ],
+      "report": {
+        "sessionDir": "/private/tmp/agentteams-issues-20261010/sessions/home/sessions/--private-tmp-agentteams-issues-20261010-sessions-work-smoke--/session-160-repaired",
+        "sourceGeneration": 2,
+        "sourceFile": "session.v2.jsonl.zstd",
+        "sourceBytes": 394,
+        "normalizedSources": 1,
+        "normalizedDroppedSourceFields": [
+          "goal"
+        ],
+        "events": 6,
+        "targetGeneration": 4,
+        "published": "session.v4.jsonl.zstd",
+        "applied": true,
+        "backup": "session.v2.jsonl.zstd.pre-160-repair.bak",
+        "publishedBytes": 497,
+        "sourceUnchanged": true,
+        "backupUnchanged": true
+      },
+      "verifiedFromPackedLayout": {
+        "dryRun": {
+          "applied": false,
+          "normalizedSources": 1
+        },
+        "apply": {
+          "applied": true,
+          "sourceUnchanged": true,
+          "backupUnchanged": true,
+          "published": "session.v4.jsonl.zstd"
+        }
+      },
+      "regressions": "scripts/legacy-session-source-repair.test.mjs (6 cases: refusal baseline, publish with untouched source, readable pre-v3 no-op, no-op for current generation, existing backup blocks the repair, RFC 8878 RLE/concatenated/truncation)"
+    },
+    "hostLevel": {
+      "unrepaired": "SessionQueryError: failed to observe session: cannot safely transform unclassified message source; source v2 artifact remains unchanged",
+      "repaired": "host page ok=true, message text preserved, attribution plugin:dsh-agent-teams"
+    }
+  },
+  "issue103": {
+    "reportedCase": "unconditional attemptId rotation for an idle member owning an open task: already fixed on the pinned baseline",
+    "realRun": {
+      "attemptStableAcrossKick": true,
+      "finalStatus": "completed",
+      "finalAttempt": 1
+    },
+    "residualRace": "not reproducible with real components (the kick availability gate precedes all lock work); no speculative scheduler change is included",
+    "fixtureHarness": "excluded from acceptance and not part of the repository"
+  },
+  "verification": {
+    "fullVerifyLog": "candidate-verify-final4.log (0 failures; includes verify:lineage-identity and verify:legacy-session-repair)"
+  }
+}

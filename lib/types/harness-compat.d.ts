@@ -9,8 +9,9 @@
  */
 import type { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
-import type { ContentBlock, MessageId } from '@deepseek-ai/dsh-llm';
+import type { ContentBlock, MessageId, MessageSource } from '@deepseek-ai/dsh-llm';
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session';
+import { type MemberToolFilter } from './tool-policies.ts';
 type Setup = (childCtx: Context, child: Agent) => () => void;
 declare module '@deepseek-ai/dsh-llm' {
     interface MessageSourceMap {
@@ -19,6 +20,41 @@ declare module '@deepseek-ai/dsh-llm' {
         };
     }
 }
+/** Package identity a released plugin-wrapper source names on older hosts. */
+export declare const AGENT_TEAMS_PLUGIN_NAME = "@nanmicoder/dsh-agent-teams";
+/**
+ * First stored format generation whose migration edges admit producer-owned
+ * source kinds. The released v2→v3 payload audit validates every message source
+ * against a closed list of released kinds, so a stored format older than this
+ * must carry a released source or the whole session becomes unreadable once a
+ * newer host opens it (#160).
+ */
+export declare const RELEASED_SOURCE_VOCABULARY_VERSION = 3;
+/** Source kinds this plugin mints on a host whose stored format admits them. */
+export type AgentTeamsSource = {
+    readonly kind: 'agent-teams';
+} | {
+    readonly kind: 'agent-teams-command';
+    readonly goal?: string;
+    readonly profile?: string;
+};
+/** Stored session format generation of the running host; 0 when it exposes none. */
+export declare function hostSessionFormatVersion(): number;
+/**
+ * Source for one AgentTeams-authored message on the running host.
+ *
+ * Current hosts mint producer-owned kinds: the Harness documents message
+ * sources as a merge-extensible vocabulary without a catch-all, so this plugin
+ * declares its own. Hosts that still store a pre-v3 generation are a different
+ * contract — their released v2→v3 migration rejects any source outside the
+ * released vocabulary, which is exactly how a plugin kind written on an older
+ * supported host poisons its session log for every later host. On those hosts
+ * the released plugin wrapper is used instead; the goal and profile already
+ * travel in the message text.
+ * @param modern - the producer-owned source to use where the host admits it.
+ * @returns a source accepted by the running host and by its migration chain.
+ */
+export declare function agentTeamsSource(modern: AgentTeamsSource): MessageSource;
 /**
  * 0.1.6 moved startup admission to serial agent/created. Older created events
  * have no source and precede session-start; ignore those until the old hook.
@@ -54,29 +90,35 @@ export declare function restrictableToolNames(agent: Agent): ReadonlySet<string>
  * forwarding a name the host dropped aborts every member spawn (#163, #164).
  * Depth enforcement itself does not depend on these names —
  * installMemberDelegationGuard bounds descendant creation by parent chain.
+ *
+ * This is the legacy filter of a member without a configured tool policy; a
+ * selected policy resolves through `resolveMemberToolFilter` instead (#59).
  */
-export declare function memberToolFilter(maxDepth: number | undefined, knownTools: ReadonlySet<string> | undefined): {
-    deny: string[];
-};
+export declare function memberToolFilter(maxDepth: number | undefined, knownTools: ReadonlySet<string> | undefined): MemberToolFilter;
 /**
- * Start one member, dropping any filter name the host reports as unknown and
- * retrying.
+ * Start one member, dropping only the built-in filter names the host reports
+ * as unknown and retrying.
  *
  * Resolving the filter against the registry view ({@link memberToolFilter})
  * only covers hosts that expose one. A rejected filter still leaves the member
  * without a session for the lifetime of the team, so the start must survive the
  * cases that resolution cannot see — no registry view, a name that is known but
  * not restrictable, a composition that mounted differently than expected. The
- * host names the offenders in its rejection, so they are removed and the start
- * retried; the retry only runs while the deny list strictly shrinks, and any
- * failure that is not an unknown-name report propagates untouched.
+ * host names the offenders in its rejection, so the relaxable ones are removed
+ * and the start retried.
+ *
+ * Only `relaxableDeny` names may be dropped, and only from `deny`. The default
+ * is exactly the built-in captain-only and depth entries (#163/#164); a name an
+ * owner-declared tool policy contributed is never removed, because silently
+ * spawning a member with a different filter than the owner declared is contract
+ * drift, not recovery. Dropping a denied name the host does not register
+ * changes nothing; dropping an allowed name would loosen the policy, so `allow`
+ * is never relaxed and the four required coordination tools can never be
+ * removed.
  * @param start - performs one start attempt for the given `toolFilter`.
  * @param filter - the filter to attempt first.
+ * @param relaxableDeny - built-in deny names the retry may drop.
  * @returns the started member.
  */
-export declare function startMemberWithLenientFilter<T>(start: (filter: {
-    deny: string[];
-}) => Promise<T>, filter: {
-    deny: string[];
-}): Promise<T>;
+export declare function startMemberWithLenientFilter<T>(start: (filter: MemberToolFilter) => Promise<T>, filter: MemberToolFilter, relaxableDeny?: readonly string[]): Promise<T>;
 export {};

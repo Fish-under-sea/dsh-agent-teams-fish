@@ -27,6 +27,11 @@ export interface TeamProfileMemberConfig {
     reasoning_effort?: string;
     executionPrompt?: string;
     fallback?: TeamModelFallbackConfig;
+    /**
+     * Owner-declared tool-policy id this profile member selects (#59). The
+     * profile only names a configured policy; it never carries raw tool lists.
+     */
+    tool_policy?: string;
 }
 /** One seed-task row in a named team-profile template (unresolved). */
 export interface TeamProfileTaskConfig {
@@ -61,6 +66,7 @@ export interface NormalizedProfileMember {
     reasoningEffort?: string;
     executionPrompt?: string;
     fallback?: TeamModelFallbackConfig;
+    toolPolicy?: string;
 }
 /** A profile seed task after assignee canonicalization; `sourceIndex` is the YAML order. */
 export interface NormalizedProfileTask {

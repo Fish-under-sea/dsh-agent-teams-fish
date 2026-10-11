@@ -1,0 +1,32 @@
+{
+  "capturedAt": "2026-10-10T15:09:49.583Z",
+  "url": "http://127.0.0.1:3099/",
+  "apiTeams": [
+    {
+      "teamId": "数据团队",
+      "name": "数据团队",
+      "captainSessionId": "session-d5eada7e-626d-4498-b8a1-c43ce84681fb",
+      "phase": "running",
+      "members": [
+        "阿明",
+        "Léa"
+      ]
+    }
+  ],
+  "dom": {
+    "card": [
+      {
+        "teamId": "team",
+        "text": "数据团队0 名成员查看团队"
+      }
+    ],
+    "switcher": [
+      "数据团队当前团队",
+      "数据团队历史记录"
+    ]
+  },
+  "screenshots": [
+    "baseline-card.png",
+    "baseline-panel.png"
+  ]
+}

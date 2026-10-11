@@ -1,0 +1,77 @@
+{
+  "finishedAt": "2026-10-10T17:48:45.076729+00:00",
+  "sourceCommit": "dd0f070545cf3be8cdff3a20a80757e4a38e21bd",
+  "passed": true,
+  "host": "0.2.0-rc.2 / macOS arm64 / official Loader",
+  "model": "deepseek-account / deepseek-flash (existing login, no new API key)",
+  "unicodeCreate": {
+    "passed": true,
+    "evidence": "/private/tmp/agentteams-issues-20261010/integration/evidence/run-observation-bug/phase1.json"
+  },
+  "qualityClosure": {
+    "passed": true,
+    "stepsPassed": 29,
+    "pathsReviewed": [
+      "lib/format.js",
+      "lib/sum.js"
+    ],
+    "operatorCorrections": "The initial graph assigned the implementation and verification to the same member. The resulting read-only re-check could not run commands. The captain added a default verifier and real reassign/amend tool calls corrected the role/contract; all original failed observations are retained. Group quality acceptance separately proves the unmodified satisfiable automatic loop."
+  },
+  "coldFork": {
+    "passed": true,
+    "previousHostPid": 13452,
+    "coldHostPid": 19404,
+    "forkId": "session-3c4974fe-20f1-4ef8-a175-00847f94201d",
+    "captainSessionId": "session-46c75f9b-6298-4cbf-91d8-58e7980756a6",
+    "nativeStatusTurn": 9,
+    "modelRequestsObserved": 13,
+    "markerCreatedByRealMember": true,
+    "policyUnchanged": true,
+    "engineerToolCount": 30,
+    "reviewerToolCount": 8,
+    "reviewerTools": [
+      "agent_teams_claim_task",
+      "agent_teams_send_message",
+      "agent_teams_status",
+      "agent_teams_update_task",
+      "glob",
+      "grep",
+      "read",
+      "subagent"
+    ]
+  },
+  "deliveryDrift": {
+    "originalSha256": "4bddceca25e07e5aba6d0d403f62b7d468be9030be9b26d1d904aa3f71c27123",
+    "changedSha256": "fcd621fee612d2fcc873dfde7423d1b4389c06b02f100e684279ef82dffb3758",
+    "before": {
+      "ok": true,
+      "blockers": [],
+      "warnings": []
+    },
+    "after": {
+      "ok": false,
+      "blockers": [
+        "t3 (review) verdict covers a revision that no longer exists: lib/sum.js changed (sha256 4bddceca -> fcd621fe) — re-review the current bytes; do not report this revision as verified",
+        "t5 (verification) verdict covers a revision that no longer exists: lib/sum.js changed (sha256 4bddceca -> fcd621fe) — re-verify the current bytes; no later sound verdict bound them"
+      ],
+      "warnings": []
+    },
+    "basicTestExit": 0,
+    "strictTestExit": 0,
+    "mutation": "appended comment only",
+    "restored": {
+      "ok": true,
+      "blockers": [],
+      "warnings": []
+    },
+    "restoredSha256": "4bddceca25e07e5aba6d0d403f62b7d468be9030be9b26d1d904aa3f71c27123"
+  },
+  "checks": {
+    "typecheck": 0,
+    "build": 0,
+    "fullVerify": 0,
+    "newRegressionCount": 121,
+    "packedLibAndRecoveryEntryMatch": true
+  },
+  "honesty": "Earlier experimental driver failures (wrong ScopeKey, overwritten metadata, idle-before-start observation, repeated staged team name) remain in private evidence and are excluded from passing acceptance."
+}

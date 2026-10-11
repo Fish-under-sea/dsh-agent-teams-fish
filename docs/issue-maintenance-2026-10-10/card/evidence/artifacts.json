@@ -1,0 +1,63 @@
+{
+  "host": {
+    "cli": "/Users/nanmi/.codex/worktrees/issue-card-203/dsh-agent-teams/node_modules/.bin/dsh",
+    "version": "0.2.0-rc.2",
+    "profilePair": "baseline and candidate both ran under the identical isolated profile card-203 (dsh-base + dsh-web-app + @nanmicoder/dsh-agent-teams link: to this worktree)"
+  },
+  "baseline": {
+    "commit": "1e1c624fd2e909008aa5228a004706b3e4460670",
+    "lib/client.js": "5f9ade2a644550bb05be312c1631f164207dff37f53e11aa4f4cb1bc3f25c1be",
+    "lib/index.js": "4d6e07b0f5107dad672868576e3a1ec178271db7141424b9db712fc7e4975ef6",
+    "lib/tools.js": "615241c4cc050e64201c5c5594b86ddac7cdca059793d43376774cd8b2fe0b7d",
+    "lib/client/agent-teams-card-definition.js": "f5632f4e84ab70963a55125f634619642b43a62ccaa466458457688299344c0e",
+    "note": "lib/client.js and lib/index.js hashes were recorded from the live pre-fix `pnpm build` of this worktree. The two host/module hashes are taken from the baseline commit because the host tsc output is build-path independent — the baseline build's lib/index.js is byte-identical to the committed lib/index.js. The committed lib/client.js (abab5537b995b8548ee8800307886d45a3043c30223a24b309e66dc502b08ced) differs from the live pre-fix build only in CSS-module class hashes and the embedded build path (it was built in worktree ce3c)."
+  },
+  "candidate": {
+    "lib/client.js": "b9e89aae9c195e33bf3da1dbeda43977a5a60511d2ffb34fcde176c0b12399c8",
+    "lib/index.js": "4d6e07b0f5107dad672868576e3a1ec178271db7141424b9db712fc7e4975ef6",
+    "lib/tools.js": "04b0f824110cdf6848055e628960fac25bfe9f9ec25821701691b7b511670bb8",
+    "lib/client/agent-teams-card-definition.js": "e68961bfcbcbd9fec1dfc6382053d7e10437948cda47b7117685569801616aa9",
+    "note": "lib/index.js is a re-export barrel and is unchanged by this fix; the host change lands in lib/tools.js and the client change in lib/client/agent-teams-card-definition.js plus the lib/client.js bundle the browser loads."
+  },
+  "realRuns": {
+    "baseline": {
+      "sessionId": "session-d5eada7e-626d-4498-b8a1-c43ce84681fb",
+      "workspace": "/private/tmp/agentteams-issues-20261010/card/workspace/ws-baseline",
+      "team": "数据团队",
+      "metaOnResult": false
+    },
+    "candidate": {
+      "sessionId": "session-5b9c59ae-7b18-47ae-8b56-2cb4fe66b13c",
+      "workspace": "/private/tmp/agentteams-issues-20261010/card/workspace/ws-candidate",
+      "team": "数据团队",
+      "metaOnResult": true
+    },
+    "candidate-long": {
+      "sessionId": "session-4b48c399-499d-44e2-884f-5d05a52ba8b1",
+      "workspace": "/private/tmp/agentteams-issues-20261010/card/workspace/ws-candidate-long",
+      "team": "58-codepoint CJK name (host truncates to 48 + sha256 digest)",
+      "metaOnResult": true
+    },
+    "legacy-long": {
+      "sessionId": "session-c2ca852c-e28e-48cd-aecd-9d754fcdc80f",
+      "workspace": "/private/tmp/agentteams-issues-20261010/card/workspace/ws-legacy-long",
+      "team": "58-codepoint CJK name",
+      "hostBuild": "baseline lib/tools.js (pre-fix artifact)",
+      "metaOnResult": false
+    },
+    "legacy-emoji": {
+      "sessionId": "session-aa175fc6-b99a-4c53-bf1d-d662d2dc7242",
+      "workspace": "/private/tmp/agentteams-issues-20261010/card/workspace/ws-legacy-emoji",
+      "team": "🚀🎯",
+      "hostBuild": "baseline lib/tools.js (pre-fix artifact)",
+      "metaOnResult": false
+    },
+    "legacy-staged": {
+      "sessionId": "session-db4ae894-6d73-4c6c-956f-ccf6f8657b39",
+      "workspace": "/private/tmp/agentteams-issues-20261010/card/workspace/ws-legacy-staged",
+      "team": "数据团队审核组 (approval=required staged plan)",
+      "hostBuild": "baseline lib/tools.js (pre-fix artifact)",
+      "metaOnResult": false
+    }
+  }
+}

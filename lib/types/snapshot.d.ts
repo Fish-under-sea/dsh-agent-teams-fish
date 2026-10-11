@@ -42,6 +42,11 @@ export interface TeamActivityTask {
     readonly kind?: string;
     readonly round?: number;
     readonly verdict?: string;
+    /**
+     * Set when this task's verdict or auto-generated work order no longer
+     * describes the current bytes; the panel must not render a bare pass badge.
+     */
+    readonly verdictStale?: string;
     /** Durable last-write stamp; drives the finished-member ordering (issue #192). */
     readonly updatedAt: number;
 }
@@ -71,6 +76,14 @@ export interface TeamActivitySnapshot {
     readonly tasks: readonly TeamActivityTask[];
     readonly messageCount: number;
     readonly captainInbox: readonly TeamActivityMessage[];
+    /** Present when the snapshot could audit the workspace bytes. */
+    readonly loopState?: string;
+    readonly deliverable?: boolean;
+    readonly delivery?: {
+        readonly ok: boolean;
+        readonly blockers: readonly string[];
+        readonly warnings: readonly string[];
+    };
 }
 /** Snapshot projection switches for live and archived teams. */
 export interface TeamSnapshotOptions {
@@ -78,6 +91,12 @@ export interface TeamSnapshotOptions {
     readonly includeRemoved?: boolean;
     /** Archived teams have no meaningful live activity after their sessions stop. */
     readonly historic?: boolean;
+    /**
+     * Absolute workspace path of the owning workspace. When present, the snapshot
+     * audits the current bytes behind every recorded verdict, so the panel and
+     * the model-facing status tool cannot report different delivery verdicts.
+     */
+    readonly workspacePath?: string;
 }
 /** Compact `provider/model` route for the activity panel, or just the model. */
 export declare function memberModelRoute(member: {
@@ -102,6 +121,7 @@ export declare function assembleTeamSnapshot(ctx: Context, stateRoot: string, wo
 export declare function collectTeamsActivity(ctx: Context, roots: readonly {
     workspace: string;
     stateRoot: string;
+    workspacePath?: string;
 }[]): Promise<TeamActivitySnapshot[]>;
 /**
  * Collect every archived team under the given workspace state roots (the

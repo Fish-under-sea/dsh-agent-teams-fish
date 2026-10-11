@@ -1,0 +1,575 @@
+{
+  "phase": "phase1",
+  "ok": true,
+  "startedAt": "2026-10-10T16:46:31.734Z",
+  "durationMs": 1078,
+  "observerCounters": {
+    "requests": 1,
+    "rejectedRoutes": 0,
+    "tools": 1,
+    "finishes": 1,
+    "errors": 0
+  },
+  "steps": [
+    {
+      "name": "plugin-info",
+      "ok": true,
+      "at": "2026-10-10T16:46:31.745Z",
+      "note": "@nanmicoder/dsh-agent-teams@0.1.22",
+      "detail": {
+        "ok": true,
+        "pluginRoot": "/private/tmp/agentteams-issues-20261010/integration/plugin",
+        "name": "@nanmicoder/dsh-agent-teams",
+        "version": "0.1.22",
+        "stateDirDefault": null,
+        "clientBundleHasUnicodeKey": true,
+        "cardModule": "/private/tmp/agentteams-issues-20261010/integration/plugin/lib/client/agent-teams-card-definition.js",
+        "stateModule": "/private/tmp/agentteams-issues-20261010/integration/plugin/lib/state.js"
+      }
+    },
+    {
+      "name": "create-call-succeeded",
+      "ok": true,
+      "at": "2026-10-10T16:46:32.807Z",
+      "note": "team_id=数据团队 phase=staged",
+      "detail": {
+        "value": {
+          "team_id": "数据团队",
+          "team_name": "数据团队",
+          "captain_session_id": "session-39b3f7d2-df78-4634-998b-831d66a29514",
+          "state_dir": "/private/tmp/agentteams-issues-20261010/integration/evidence/ws/p1-unicode-team/.agent-teams/数据团队",
+          "phase": "staged",
+          "task_planning": "seed",
+          "members": [
+            {
+              "member_name": "阿明",
+              "member_id": "",
+              "member_role": "engineer",
+              "provider": "deepseek-account",
+              "model": "deepseek-flash",
+              "reasoning_effort": "max",
+              "status": "idle"
+            },
+            {
+              "member_name": "Léa",
+              "member_id": "",
+              "member_role": "reviewer",
+              "provider": "deepseek-account",
+              "model": "deepseek-flash",
+              "reasoning_effort": "max",
+              "tool_policy": "researcher",
+              "status": "idle"
+            }
+          ],
+          "tasks": []
+        },
+        "meta": {
+          "team_id": "数据团队",
+          "team_name": "数据团队",
+          "captain_session_id": "session-39b3f7d2-df78-4634-998b-831d66a29514",
+          "phase": "staged",
+          "members": [
+            {
+              "id": "",
+              "name": "阿明",
+              "role": "engineer",
+              "status": "idle"
+            },
+            {
+              "id": "",
+              "name": "Léa",
+              "role": "reviewer",
+              "status": "idle"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "durable-team-dir-is-canonical-unicode-id",
+      "ok": true,
+      "at": "2026-10-10T16:46:32.807Z",
+      "note": "dirs=[\"数据团队\"]",
+      "detail": {
+        "stateRoot": "/private/tmp/agentteams-issues-20261010/integration/evidence/ws/p1-unicode-team/.agent-teams",
+        "dirs": [
+          "数据团队"
+        ],
+        "recordId": "数据团队",
+        "recordName": "数据团队",
+        "captainSessionIdOnDisk": "session-39b3f7d2-df78-4634-998b-831d66a29514"
+      }
+    },
+    {
+      "name": "durable-members-recorded",
+      "ok": true,
+      "at": "2026-10-10T16:46:32.807Z",
+      "note": "members=阿明/engineer, Léa/reviewer",
+      "detail": {
+        "members": [
+          {
+            "id": "",
+            "name": "阿明",
+            "role": "engineer",
+            "provider": "deepseek-account",
+            "model": "deepseek-flash",
+            "reasoningEffort": "max",
+            "joinedAt": 1791650792804,
+            "status": "idle"
+          },
+          {
+            "id": "",
+            "name": "Léa",
+            "role": "reviewer",
+            "provider": "deepseek-account",
+            "model": "deepseek-flash",
+            "reasoningEffort": "max",
+            "toolPolicy": "researcher",
+            "toolFilter": {
+              "allow": [
+                "read",
+                "glob",
+                "grep",
+                "agent_teams_claim_task",
+                "agent_teams_update_task",
+                "agent_teams_send_message",
+                "agent_teams_status"
+              ],
+              "deny": [
+                "agent_teams_create",
+                "agent_teams_approve",
+                "agent_teams_edit_plan",
+                "agent_teams_add_member",
+                "agent_teams_remove_member",
+                "agent_teams_create_task",
+                "agent_teams_reassign_task",
+                "agent_teams_amend_task",
+                "agent_teams_resume",
+                "agent_teams_delete"
+              ]
+            },
+            "joinedAt": 1791650792804,
+            "status": "idle"
+          }
+        ]
+      }
+    },
+    {
+      "name": "reviewer-carries-owner-readonly-policy",
+      "ok": true,
+      "at": "2026-10-10T16:46:32.808Z",
+      "note": "toolPolicy=researcher allow=[\"read\",\"glob\",\"grep\",\"agent_teams_claim_task\",\"agent_teams_update_task\",\"agent_teams_send_message\",\"agent_teams_status\"] deny=10",
+      "detail": {
+        "reviewer": {
+          "id": "",
+          "name": "Léa",
+          "role": "reviewer",
+          "provider": "deepseek-account",
+          "model": "deepseek-flash",
+          "reasoningEffort": "max",
+          "toolPolicy": "researcher",
+          "toolFilter": {
+            "allow": [
+              "read",
+              "glob",
+              "grep",
+              "agent_teams_claim_task",
+              "agent_teams_update_task",
+              "agent_teams_send_message",
+              "agent_teams_status"
+            ],
+            "deny": [
+              "agent_teams_create",
+              "agent_teams_approve",
+              "agent_teams_edit_plan",
+              "agent_teams_add_member",
+              "agent_teams_remove_member",
+              "agent_teams_create_task",
+              "agent_teams_reassign_task",
+              "agent_teams_amend_task",
+              "agent_teams_resume",
+              "agent_teams_delete"
+            ]
+          },
+          "joinedAt": 1791650792804,
+          "status": "idle"
+        },
+        "engineerToolPolicy": null,
+        "engineerToolFilter": null
+      }
+    },
+    {
+      "name": "engineer-keeps-default-capabilities",
+      "ok": true,
+      "at": "2026-10-10T16:46:32.808Z",
+      "note": "engineer.toolPolicy=<none>"
+    },
+    {
+      "name": "host-reads-the-same-canonical-id",
+      "ok": true,
+      "at": "2026-10-10T16:46:32.809Z",
+      "note": "readerOk=true id=数据团队",
+      "detail": {
+        "file": "/private/tmp/agentteams-issues-20261010/integration/evidence/ws/p1-unicode-team/.agent-teams/数据团队/team.json",
+        "dirEntries": [
+          "inbox",
+          "team.json"
+        ],
+        "defect": "record does not satisfy the durable team contract"
+      }
+    },
+    {
+      "name": "card-fold-resolves-the-canonical-team-id",
+      "ok": true,
+      "at": "2026-10-10T16:46:32.811Z",
+      "note": "folded=数据团队 canonical=数据团队 derived=数据团队",
+      "detail": {
+        "fold": {
+          "ok": true,
+          "modulePath": "/private/tmp/agentteams-issues-20261010/integration/plugin/lib/client/agent-teams-card-definition.js",
+          "matchStart": "start",
+          "derived": {
+            "teamId": "数据团队",
+            "name": "数据团队"
+          },
+          "canonical": {
+            "teamId": "数据团队",
+            "captainSessionId": "session-39b3f7d2-df78-4634-998b-831d66a29514",
+            "members": [
+              {
+                "id": "",
+                "name": "阿明",
+                "role": "engineer"
+              },
+              {
+                "id": "",
+                "name": "Léa",
+                "role": "reviewer"
+              }
+            ]
+          },
+          "legacyText": "数据团队",
+          "failed": false,
+          "state": {
+            "teamId": "数据团队",
+            "name": "数据团队",
+            "accepted": true,
+            "captainSessionId": "session-39b3f7d2-df78-4634-998b-831d66a29514",
+            "members": [
+              {
+                "id": "",
+                "name": "阿明",
+                "role": "engineer"
+              },
+              {
+                "id": "",
+                "name": "Léa",
+                "role": "reviewer"
+              }
+            ]
+          },
+          "cardData": {
+            "teamId": "数据团队",
+            "captainSessionId": "session-39b3f7d2-df78-4634-998b-831d66a29514",
+            "teamName": "数据团队",
+            "members": [
+              {
+                "id": "",
+                "name": "阿明",
+                "role": "engineer"
+              },
+              {
+                "id": "",
+                "name": "Léa",
+                "role": "reviewer"
+              }
+            ]
+          }
+        },
+        "modulePath": "/private/tmp/agentteams-issues-20261010/integration/plugin/lib/client/agent-teams-card-definition.js"
+      }
+    },
+    {
+      "name": "card-fold-carries-roster-and-captain",
+      "ok": true,
+      "at": "2026-10-10T16:46:32.811Z",
+      "note": "captain=session-39b3f7d2-df78-4634-998b-831d66a29514 members=阿明/engineer, Léa/reviewer"
+    },
+    {
+      "name": "staged-team-is-not-started-by-the-create-call",
+      "ok": true,
+      "at": "2026-10-10T16:46:32.811Z",
+      "note": "toolPhase=staged durablePhase=staged members=阿明:unspawned, Léa:unspawned",
+      "detail": {
+        "toolPhase": "staged",
+        "durablePhase": "staged",
+        "statuses": [
+          "idle",
+          "idle"
+        ]
+      }
+    }
+  ],
+  "result": {
+    "created": {
+      "sessionId": "session-39b3f7d2-df78-4634-998b-831d66a29514",
+      "workspaceId": "763cbbea-c79c-45c9-97e6-f5d9fa71bff2",
+      "workspace": {
+        "host": {},
+        "id": "763cbbea-c79c-45c9-97e6-f5d9fa71bff2",
+        "record": {
+          "path": "/private/tmp/agentteams-issues-20261010/integration/evidence/ws/p1-unicode-team",
+          "title": "集成验收 / phase1 中文建队",
+          "sessionIds": [
+            "session-39b3f7d2-df78-4634-998b-831d66a29514"
+          ],
+          "createdAt": "2026-10-10T16:37:33.005Z",
+          "updatedAt": "2026-10-10T16:46:31.757Z"
+        }
+      }
+    },
+    "ws": "/private/tmp/agentteams-issues-20261010/integration/evidence/ws/p1-unicode-team",
+    "stateRoot": "/private/tmp/agentteams-issues-20261010/integration/evidence/ws/p1-unicode-team/.agent-teams",
+    "record": {
+      "name": "数据团队",
+      "id": "数据团队",
+      "description": "集成验收：真实 Flash 团队的中文/Unicode 建队用例",
+      "captainSessionId": "session-39b3f7d2-df78-4634-998b-831d66a29514",
+      "createdAt": 1791650792804,
+      "phase": "staged",
+      "planReviewState": "awaiting_review",
+      "members": [
+        {
+          "id": "",
+          "name": "阿明",
+          "role": "engineer",
+          "provider": "deepseek-account",
+          "model": "deepseek-flash",
+          "reasoningEffort": "max",
+          "joinedAt": 1791650792804,
+          "status": "idle"
+        },
+        {
+          "id": "",
+          "name": "Léa",
+          "role": "reviewer",
+          "provider": "deepseek-account",
+          "model": "deepseek-flash",
+          "reasoningEffort": "max",
+          "toolPolicy": "researcher",
+          "toolFilter": {
+            "allow": [
+              "read",
+              "glob",
+              "grep",
+              "agent_teams_claim_task",
+              "agent_teams_update_task",
+              "agent_teams_send_message",
+              "agent_teams_status"
+            ],
+            "deny": [
+              "agent_teams_create",
+              "agent_teams_approve",
+              "agent_teams_edit_plan",
+              "agent_teams_add_member",
+              "agent_teams_remove_member",
+              "agent_teams_create_task",
+              "agent_teams_reassign_task",
+              "agent_teams_amend_task",
+              "agent_teams_resume",
+              "agent_teams_delete"
+            ]
+          },
+          "joinedAt": 1791650792804,
+          "status": "idle"
+        }
+      ],
+      "tasks": [],
+      "taskSeq": 0
+    },
+    "create": {
+      "ok": true,
+      "sessionId": "session-39b3f7d2-df78-4634-998b-831d66a29514",
+      "name": "agent_teams_create",
+      "callId": "integration-5f95dff2-e43f-4b1e-8df6-7164b458872c",
+      "ms": 5,
+      "result": {
+        "isError": false,
+        "errorName": null,
+        "code": null,
+        "message": null,
+        "content": "Team \"数据团队\" plan created under /private/tmp/agentteams-issues-20261010/integration/evidence/ws/p1-unicode-team/.agent-teams/数据团队. It is staged: finish the roster and DAG, then wait for the user to edit and approve it. Do not start or approve it yourself.\n",
+        "value": {
+          "team_id": "数据团队",
+          "team_name": "数据团队",
+          "captain_session_id": "session-39b3f7d2-df78-4634-998b-831d66a29514",
+          "state_dir": "/private/tmp/agentteams-issues-20261010/integration/evidence/ws/p1-unicode-team/.agent-teams/数据团队",
+          "phase": "staged",
+          "task_planning": "seed",
+          "members": [
+            {
+              "member_name": "阿明",
+              "member_id": "",
+              "member_role": "engineer",
+              "provider": "deepseek-account",
+              "model": "deepseek-flash",
+              "reasoning_effort": "max",
+              "status": "idle"
+            },
+            {
+              "member_name": "Léa",
+              "member_id": "",
+              "member_role": "reviewer",
+              "provider": "deepseek-account",
+              "model": "deepseek-flash",
+              "reasoning_effort": "max",
+              "tool_policy": "researcher",
+              "status": "idle"
+            }
+          ],
+          "tasks": []
+        },
+        "meta": {
+          "team_id": "数据团队",
+          "team_name": "数据团队",
+          "captain_session_id": "session-39b3f7d2-df78-4634-998b-831d66a29514",
+          "phase": "staged",
+          "members": [
+            {
+              "id": "",
+              "name": "阿明",
+              "role": "engineer",
+              "status": "idle"
+            },
+            {
+              "id": "",
+              "name": "Léa",
+              "role": "reviewer",
+              "status": "idle"
+            }
+          ]
+        },
+        "keys": [
+          "isError",
+          "content",
+          "meta",
+          "value"
+        ]
+      }
+    },
+    "fold": {
+      "ok": true,
+      "modulePath": "/private/tmp/agentteams-issues-20261010/integration/plugin/lib/client/agent-teams-card-definition.js",
+      "matchStart": "start",
+      "derived": {
+        "teamId": "数据团队",
+        "name": "数据团队"
+      },
+      "canonical": {
+        "teamId": "数据团队",
+        "captainSessionId": "session-39b3f7d2-df78-4634-998b-831d66a29514",
+        "members": [
+          {
+            "id": "",
+            "name": "阿明",
+            "role": "engineer"
+          },
+          {
+            "id": "",
+            "name": "Léa",
+            "role": "reviewer"
+          }
+        ]
+      },
+      "legacyText": "数据团队",
+      "failed": false,
+      "state": {
+        "teamId": "数据团队",
+        "name": "数据团队",
+        "accepted": true,
+        "captainSessionId": "session-39b3f7d2-df78-4634-998b-831d66a29514",
+        "members": [
+          {
+            "id": "",
+            "name": "阿明",
+            "role": "engineer"
+          },
+          {
+            "id": "",
+            "name": "Léa",
+            "role": "reviewer"
+          }
+        ]
+      },
+      "cardData": {
+        "teamId": "数据团队",
+        "captainSessionId": "session-39b3f7d2-df78-4634-998b-831d66a29514",
+        "teamName": "数据团队",
+        "members": [
+          {
+            "id": "",
+            "name": "阿明",
+            "role": "engineer"
+          },
+          {
+            "id": "",
+            "name": "Léa",
+            "role": "reviewer"
+          }
+        ]
+      }
+    },
+    "callEvent": {
+      "type": "tool/call",
+      "seq": 1,
+      "data": {
+        "callId": "call_create",
+        "name": "agent_teams_create",
+        "arguments": "{\"name\":\"数据团队\",\"description\":\"集成验收：真实 Flash 团队的中文/Unicode 建队用例\",\"approval\":\"required\",\"plan\":{\"members\":[{\"name\":\"阿明\",\"role\":\"engineer\"},{\"name\":\"Léa\",\"role\":\"reviewer\",\"tool_policy\":\"researcher\"}],\"tasks\":[]}}"
+      }
+    },
+    "resultEvent": {
+      "type": "tool/result",
+      "seq": 2,
+      "data": {
+        "turn": 1,
+        "step": 1,
+        "message": {
+          "role": "tool",
+          "source": {
+            "kind": "tool",
+            "callId": "call_create"
+          },
+          "toolCallId": "call_create",
+          "content": [
+            {
+              "type": "text",
+              "text": "Team \"数据团队\" plan created under /private/tmp/agentteams-issues-20261010/integration/evidence/ws/p1-unicode-team/.agent-teams/数据团队. It is staged: finish the roster and DAG, then wait for the user to edit and approve it. Do not start or approve it yourself.\n"
+            }
+          ],
+          "isError": false
+        },
+        "meta": {
+          "team_id": "数据团队",
+          "team_name": "数据团队",
+          "captain_session_id": "session-39b3f7d2-df78-4634-998b-831d66a29514",
+          "phase": "staged",
+          "members": [
+            {
+              "id": "",
+              "name": "阿明",
+              "role": "engineer",
+              "status": "idle"
+            },
+            {
+              "id": "",
+              "name": "Léa",
+              "role": "reviewer",
+              "status": "idle"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

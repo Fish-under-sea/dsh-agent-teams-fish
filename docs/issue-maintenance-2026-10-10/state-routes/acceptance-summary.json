@@ -1,0 +1,71 @@
+{
+  "group": "state-routes",
+  "generatedAt": "2026-10-10",
+  "modelRoute": "deepseek-account/deepseek-flash (existing authenticated account service; no API key configured, read or copied)",
+  "host": "@deepseek-ai/dsh 0.2.0-rc.2 via the official CLI and real Loader",
+  "issues": {
+    "188": {
+      "writeSideRealHost": {
+        "script": "/private/tmp/agentteams-issues-20261010/state-routes/run-188-write.sh",
+        "candidate": "agent_teams_update_task with line -1 / 1.5 / -1176 persisted NO line key; valid 0 and 1176 persisted verbatim; readTeam then succeeded",
+        "baseline": "the same call persisted line -1 / 1.5 / -1176; every later tool call failed with 'invalid AgentTeams state in team \"...\"' and readTeam threw"
+      },
+      "readSide": {
+        "durableRegression": "scripts/issue-188.test.mjs (9 tests, real disk)",
+        "candidate": "9/9 pass",
+        "baseline": "1/9 pass (8 fail)"
+      }
+    },
+    "189": {
+      "realHost": {
+        "script": "/private/tmp/agentteams-issues-20261010/state-routes/run-189-real.sh",
+        "catalogs": "openai-codex (8 models) and deepseek-account (2 models) both really mounted",
+        "captain": "real Agent created on openai-codex (planning only; no generation request sent to it)",
+        "baseline": "agent_teams_add_member failed: pi-ai provider \"openai-codex\" has no configured model \"deepseek-flash\" (code UNKNOWN_MODEL)",
+        "candidate": "agent_teams_add_member resolved deepseek-account/deepseek-flash; team.json recorded it"
+      },
+      "durableRegression": {
+        "file": "scripts/issue-189.test.mjs",
+        "candidate": "9/9 pass",
+        "baseline": "0/1 fail"
+      }
+    },
+    "205": {
+      "durableRegression": {
+        "file": "scripts/issue-205.test.mjs",
+        "candidate": "11/11 pass",
+        "baseline": "fails",
+        "covers": "run A record policy, silent cases, terminal-status settlement boundary, message wording"
+      },
+      "realHost": {
+        "script": "/private/tmp/agentteams-issues-20261010/state-routes/run-205.sh",
+        "harness": "persistent official `dsh web` profile with real workspaceRegistry/sessionController/agents/tools",
+        "shapeIdleOrRemoved": {
+          "candidate": "durable note appended; task completed and member idle left unchanged",
+          "baseline": "captain inbox stayed at 1 line: no durable record"
+        },
+        "shapeRunA": {
+          "condition": "member durable status working with NO open attempt (observed in the live record: task t1 completed, member working/running)",
+          "candidate": "durable note appended",
+          "baseline": "durable note appended (the old code recorded this shape too, which is exactly why the earlier candidate must not drop it)"
+        }
+      },
+      "injectedFailureDisclosure": "host-level turn failure thrown by a test-only plugin inside a real agent/pre-step waterfall listener; explicitly NOT a real account 429",
+      "messageBoundaries": {
+        "completed": "Task tN had already completed; ... work landed.",
+        "failed/cancelled": "Task tN was already closed as <status>; its record was left unchanged.",
+        "pending/claimed/in_progress or no observed task": "plain 'No open attempt was owned; no task state was changed.'",
+        "note": "In the recorded real-host runs the plugin's listener observes no open attempt at error time (observedOpenAttempt: null), so both shapes correctly produce the plain wording. The terminal-status wording is pinned by pure tests in scripts/issue-205.test.mjs."
+      }
+    }
+  },
+  "repositoryRegressions": {
+    "pnpm typecheck": "exit 0",
+    "node scripts/verify.mjs": "exit 0",
+    "pnpm verify:issue-regressions": "24/24 pass",
+    "member-failure-tdd": "10/10",
+    "quality-gates-tdd": "pass",
+    "13 related node --test suites": "0 failures",
+    "lifecycle/compat/fallback/stress": "exit 0"
+  }
+}

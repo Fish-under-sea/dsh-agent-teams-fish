@@ -1,0 +1,313 @@
+{
+  "capturedAt": "2026-10-10T16:47:31.941666+00:00",
+  "commit": "dd0f070545cf3be8cdff3a20a80757e4a38e21bd",
+  "tarball": "/private/tmp/agentteams-issues-20261010/integration/artifacts/nanmicoder-dsh-agent-teams-0.1.22.tgz",
+  "sha256": "c5de0b2e5e31b1013512d1ebc9d2234b38f462d0f2d05b6d1cad569a16b74268",
+  "checked": {
+    "lib/client/activity-model.js": {
+      "sha256": "8e67f09cd409e7803f6e29796c485bbb4b5441614405f921625a42d21243b420",
+      "matchesWorktree": true
+    },
+    "lib/client/activity-monitor.js": {
+      "sha256": "b94f500f17605198f0ac9285469232ddf105e264ebef2cd133cc00b38aab0805",
+      "matchesWorktree": true
+    },
+    "lib/client/ActivityPanel.js": {
+      "sha256": "a4c0d7eabf48d11451e5ba8cd4c21ed9497c12cd2d4533a56c337885aeb6aede",
+      "matchesWorktree": true
+    },
+    "lib/client/agent-teams-card-definition.js": {
+      "sha256": "e68961bfcbcbd9fec1dfc6382053d7e10437948cda47b7117685569801616aa9",
+      "matchesWorktree": true
+    },
+    "lib/client/AgentTeamsCard.js": {
+      "sha256": "9b2277c480b10266d706ea2e7504af7df1240d7fbb14608798824a046f098f26",
+      "matchesWorktree": true
+    },
+    "lib/artifacts.js": {
+      "sha256": "b54a0a548b3512a07dbfae3ec5f8a989bbb3b108ce313fb1b393f1c82df7fd8a",
+      "matchesWorktree": true
+    },
+    "lib/client/artwork.js": {
+      "sha256": "5fa81b5d8d9c775d338090cd1ece11e72d4c71a46559388f049a835bf994e61d",
+      "matchesWorktree": true
+    },
+    "lib/capabilities.js": {
+      "sha256": "afd730b105fa73ea44438982e43df3caa382d2631a32de3b737ff6bf4c05287b",
+      "matchesWorktree": true
+    },
+    "lib/client.js": {
+      "sha256": "9f3bd1bf5eb17691934daa72d54caa6b790bc8f2fac07c8505dcd5512eea9aaf",
+      "matchesWorktree": true
+    },
+    "lib/command.js": {
+      "sha256": "b91b3373cb1d1c1deb90f5c9df90436c6aa8419e19de1756c50d02bce0ac4784",
+      "matchesWorktree": true
+    },
+    "lib/event-types.js": {
+      "sha256": "26f6c5a532a7be2cd66cf0cdc7959d7b8b8b5ea8c59b994c38bc870ad050954e",
+      "matchesWorktree": true
+    },
+    "lib/events.js": {
+      "sha256": "f65d9a5ff1ae70cb576cdbdc3123c1da13af959db6c6f1ea0ce9c5d46f94a082",
+      "matchesWorktree": true
+    },
+    "lib/harness-compat.js": {
+      "sha256": "66380b1613c72b966c91f6251cdd0370bcbca2d5ed9057684a002528c1e3314c",
+      "matchesWorktree": true
+    },
+    "lib/client/icons.js": {
+      "sha256": "640edf5d4f55f2884d46fed1b828cc43e410cf8358f0f2bfd65d9b4cd6b69de9",
+      "matchesWorktree": true
+    },
+    "lib/client/index.js": {
+      "sha256": "69a0826d80d3ad5da8d00dfa1537d4209459e6a6119a7ae3ade17f011c1a437d",
+      "matchesWorktree": true
+    },
+    "lib/index.js": {
+      "sha256": "afd25a44627557da3d4a188e0d1cb7fdd6884c8148e16765f50f9fecbfcb8994",
+      "matchesWorktree": true
+    },
+    "lib/lineage.js": {
+      "sha256": "65e7a3072ec6ccd64f6e937bdf37d3af3370291289ba9d939ff445d253cedd89",
+      "matchesWorktree": true
+    },
+    "lib/client/locales.js": {
+      "sha256": "00cdb347925bbbfb5951c8a464dd87187127f2ba5e56bcd07bd3a37884fac80d",
+      "matchesWorktree": true
+    },
+    "lib/mailbox.js": {
+      "sha256": "9d3e691b1c6d696e68b96f2f8d76acb391fa92d0f240768ae7f59d05ed32fc5e",
+      "matchesWorktree": true
+    },
+    "lib/members.js": {
+      "sha256": "f4d8c30c71bc80d954fe98e229263bca216cafd5fccacb1d4bea23ed165bf92b",
+      "matchesWorktree": true
+    },
+    "lib/client/panel-geometry.js": {
+      "sha256": "484670b4b70ce3466dbe5b7aa4ec740ff75cfcf4d3aceab4668035e9b4461dbd",
+      "matchesWorktree": true
+    },
+    "lib/profiles.js": {
+      "sha256": "84c7795f92c5719177d9db03cce01042e076eda8a2c546c809f47a52c6bc0ae4",
+      "matchesWorktree": true
+    },
+    "lib/quality-gates.js": {
+      "sha256": "b030b03128051f0f20aa3b109d3a8da898fe003211440ac1fade7acb1163ba99",
+      "matchesWorktree": true
+    },
+    "lib/scheduler.js": {
+      "sha256": "235c497f6835c91313eff9a1b0905ee62569d5fba509d39d960264f135b7151e",
+      "matchesWorktree": true
+    },
+    "lib/client/session-navigation.js": {
+      "sha256": "cdb59401cdd908a2414942dccdc6a5d86c0426d18dd6d6acc6090ae2a0e6ff43",
+      "matchesWorktree": true
+    },
+    "lib/snapshot.js": {
+      "sha256": "4e0863105f4fb187014829f85ec295d43e7acaf012f1064c6a9649e04e17a35a",
+      "matchesWorktree": true
+    },
+    "lib/client/StagingPlanEditor.js": {
+      "sha256": "57b852fb5f86cc6fa4946c1a2f353e051d3c33c69ca0d5a5bf63e055f1f4e616",
+      "matchesWorktree": true
+    },
+    "lib/state.js": {
+      "sha256": "c06d1df935a6ff7a4b1795f5bbf2e01bed98a8e67d7493ffafb7f4b2f6e6bd76",
+      "matchesWorktree": true
+    },
+    "lib/client/TeamChatEntry.js": {
+      "sha256": "42d687240932b4a7e67db93a9de28ed577e9ce7f4bb2796a7be170de7ac3e5d4",
+      "matchesWorktree": true
+    },
+    "lib/tool-names.js": {
+      "sha256": "faa05571fd224d91936b90c849cbf02404dbd928462acac51d43d31242dcb310",
+      "matchesWorktree": true
+    },
+    "lib/tool-policies.js": {
+      "sha256": "436dea914b4219140c76db823e78c9c92e528c03be7000b5b89c82280ebaa74e",
+      "matchesWorktree": true
+    },
+    "lib/tools.js": {
+      "sha256": "1afd76b73fc32cdcb5f05cf667a706a824a572639114ade21081cc7876524abc",
+      "matchesWorktree": true
+    },
+    "lib/types.js": {
+      "sha256": "c1d82db9158a4f794b46db5929bdea9df13d71650599adc3e17e862bd26f86bd",
+      "matchesWorktree": true
+    },
+    "lib/web-routes.js": {
+      "sha256": "a7733d5295001c713b96a547e9df73bf694cc99184aa8926b7cafb17316990c8",
+      "matchesWorktree": true
+    },
+    "lib/workspace-audit.js": {
+      "sha256": "0ee95370791fd2a9dcd98eae6dcda76b37cb30b743cf63be093212cffd021d16",
+      "matchesWorktree": true
+    },
+    "lib/client/workspace-state.js": {
+      "sha256": "0204db59b8ab6135423c2b3e8ccd7e803a8d65c95b63acd57e4fe5a80e768c76",
+      "matchesWorktree": true
+    },
+    "lib/client/WorkspaceActivity.js": {
+      "sha256": "2ae57fd7f4c461e6e034e06ebfa7d0d6232be9df9b95f8c4b88e811988c998bd",
+      "matchesWorktree": true
+    },
+    "lib/git-artifact-stamp.json": {
+      "sha256": "c5093fa08b20dcfc67385fff836ac8895a7baac187e857b42c11cde750af6186",
+      "matchesWorktree": true
+    },
+    "lib/client.js.map": {
+      "sha256": "2f68402f50677e88a24eb3b928d14ff144c88c07e123b32b9253e87c94776f2a",
+      "matchesWorktree": true
+    },
+    "scripts/legacy-session-source-repair.mjs": {
+      "sha256": "ca8d4170a47bf09e5c110cffa745caa3535621a31ba7fb9e1b3106223f115a46",
+      "matchesWorktree": true
+    },
+    "lib/types/client/activity-model.d.ts": {
+      "sha256": "2fe0e3a477230e256ebfdef25ca5b998829d5545be624343d38daba60e11b53e",
+      "matchesWorktree": true
+    },
+    "lib/types/client/activity-monitor.d.ts": {
+      "sha256": "92ce7a2f35f606cf049acfeef15eeb9bdff2fad5aeaf18d8ed9a8cd762d2eb04",
+      "matchesWorktree": true
+    },
+    "lib/types/client/ActivityPanel.d.ts": {
+      "sha256": "d590fe9caa8c4a7c0d11d4415206787b8d06c35d29cc1ece7efc4d7cf63cc447",
+      "matchesWorktree": true
+    },
+    "lib/types/client/agent-teams-card-definition.d.ts": {
+      "sha256": "127828e7da0b1da84acbfd5b2c8d4cf283ddeb475b00eac08a0a26c38eb768ae",
+      "matchesWorktree": true
+    },
+    "lib/types/client/AgentTeamsCard.d.ts": {
+      "sha256": "fe09026129199037cd7473293145b8bb5dfd22e3742fec1b2ba27fa1738d13bb",
+      "matchesWorktree": true
+    },
+    "lib/types/artifacts.d.ts": {
+      "sha256": "c045542ca23ef87a8219798d13b475e44b6bc6846a8ace269a0460d33c5a6e1e",
+      "matchesWorktree": true
+    },
+    "lib/types/client/artwork.d.ts": {
+      "sha256": "d54529e7b079755e9d1eed8d067acaa163e72c63ec6ac0ce61ebcb1cf61bb47c",
+      "matchesWorktree": true
+    },
+    "lib/types/capabilities.d.ts": {
+      "sha256": "526053f718f392498f5d3a556a650d94566dcbe84eeaf66e7d2f9f923a86aa4a",
+      "matchesWorktree": true
+    },
+    "lib/types/command.d.ts": {
+      "sha256": "4f63e9cefa117d1fc19ffb08be8e343618e832231b44ae2d325cf75aba056824",
+      "matchesWorktree": true
+    },
+    "lib/types/event-types.d.ts": {
+      "sha256": "13c195ade0b648e3c1027cf8c35ca711e7b3f2a3125ae98985310eb2e269e191",
+      "matchesWorktree": true
+    },
+    "lib/types/events.d.ts": {
+      "sha256": "89590191a55aad86f39e102f5d1f2f5bbe4c46d29c513aca135858e36f60557a",
+      "matchesWorktree": true
+    },
+    "lib/types/harness-compat.d.ts": {
+      "sha256": "4874070352a2089a423c3a94ceb0267187903fd54935dd8eebb2a649bfd44112",
+      "matchesWorktree": true
+    },
+    "lib/types/client/icons.d.ts": {
+      "sha256": "7f237db7104d4c77b67b6a2d91e21baf3f671f2f9002316a1d96e29c1587d4ae",
+      "matchesWorktree": true
+    },
+    "lib/types/client/index.d.ts": {
+      "sha256": "0f88ae860e4091a54cdb39c1fa3ca98fce0e36610e1136aef6ac9b47aa2d968e",
+      "matchesWorktree": true
+    },
+    "lib/types/index.d.ts": {
+      "sha256": "1326bb7cd4d614890e3d4b897152a36765ac6f7b44cbcf62652e3e800fb3547d",
+      "matchesWorktree": true
+    },
+    "lib/types/lineage.d.ts": {
+      "sha256": "bb68da7e380ae345f83cdecde53d09ad67c9cd86ccc672ba63a22f350b44611e",
+      "matchesWorktree": true
+    },
+    "lib/types/client/locales.d.ts": {
+      "sha256": "af4ac14f7c533ca75c2876c9cd5f972b3f9fb7b7aeae10b608be97754cd894ae",
+      "matchesWorktree": true
+    },
+    "lib/types/mailbox.d.ts": {
+      "sha256": "c0314176414bfd94be657f7fbdc3646a15d46e9b658830e10bbf131ebb0fbe02",
+      "matchesWorktree": true
+    },
+    "lib/types/members.d.ts": {
+      "sha256": "0a37715ecc948ce0cdb7bbd9c2204ca469659c3f8b68782a02d4976f5e8c3fa1",
+      "matchesWorktree": true
+    },
+    "lib/types/client/panel-geometry.d.ts": {
+      "sha256": "354fa7825a7e6148a8cae75c7389902d3d0d6944c1ce682160874ae4b7f271b9",
+      "matchesWorktree": true
+    },
+    "lib/types/profiles.d.ts": {
+      "sha256": "5665e17202d883c5b020461dc9bacd610680349b9bd56a6ee87ff90e8b32d700",
+      "matchesWorktree": true
+    },
+    "lib/types/quality-gates.d.ts": {
+      "sha256": "a2c39fd3783fa8d8a56b5c35991c695aeb146167b6cdf5b05cbda09e78038df5",
+      "matchesWorktree": true
+    },
+    "lib/types/scheduler.d.ts": {
+      "sha256": "b9b121e00943e24a6898a827f807edf78ace26e0991d14321599ea5b426eacff",
+      "matchesWorktree": true
+    },
+    "lib/types/client/session-navigation.d.ts": {
+      "sha256": "d3e55ef067bcfabf6d3af932abb0f4f91b8a11531dbfa7b4ab40d2d22601b634",
+      "matchesWorktree": true
+    },
+    "lib/types/snapshot.d.ts": {
+      "sha256": "137381d69fd63b3ecabce7bd67e687bd5681295cd7eb019598215506f6f937cd",
+      "matchesWorktree": true
+    },
+    "lib/types/client/StagingPlanEditor.d.ts": {
+      "sha256": "a4fa4c6945c4f538cf879b6b6ad962d4a3e49ec40fc9424e69b863285267174b",
+      "matchesWorktree": true
+    },
+    "lib/types/state.d.ts": {
+      "sha256": "d1788c8eb70d45778eabffed284fea9c577b2cf7b104969f1e0f6f1328ea9022",
+      "matchesWorktree": true
+    },
+    "lib/types/client/TeamChatEntry.d.ts": {
+      "sha256": "bcc941ff039e3ca9898017474671a76befa59b11be0962c089c52ffaf87df08c",
+      "matchesWorktree": true
+    },
+    "lib/types/tool-names.d.ts": {
+      "sha256": "181b9182ab4df9b294ac80ea2ddb0ab51fbb29115fc758e880ca50a7c9589532",
+      "matchesWorktree": true
+    },
+    "lib/types/tool-policies.d.ts": {
+      "sha256": "be3106b2af691e0b98d50a039ad52808547f1dc9a653798085dd078be88a15e6",
+      "matchesWorktree": true
+    },
+    "lib/types/tools.d.ts": {
+      "sha256": "4cb50c9440d5dfc4ff9f37002a37191eea4e0be130620f5fbd1803e93e50a2a2",
+      "matchesWorktree": true
+    },
+    "lib/types/types.d.ts": {
+      "sha256": "0d8ee86eed4a8f88a87692d63ce81b84e9d6c25e472a7d86d9db9872aedd1384",
+      "matchesWorktree": true
+    },
+    "lib/types/web-routes.d.ts": {
+      "sha256": "f6d84dc9dcaa4bce07f3ec71d74abfc832bfdd555910ec8c0a1435a47c05735b",
+      "matchesWorktree": true
+    },
+    "lib/types/workspace-audit.d.ts": {
+      "sha256": "efc46fa3b36bc65a33cb0be21381aa2d61dc52a5c3aa142582c0fb27ead9a79a",
+      "matchesWorktree": true
+    },
+    "lib/types/client/workspace-state.d.ts": {
+      "sha256": "836c596045cc0b7fd9dbe0fe51c38ee27b9c96afa20d4b80199e289aa59b3815",
+      "matchesWorktree": true
+    },
+    "lib/types/client/WorkspaceActivity.d.ts": {
+      "sha256": "0dba78a07b73605638f652eaf01889122e3d3707ab334fa621e235003a1ba8c5",
+      "matchesWorktree": true
+    }
+  },
+  "allMatch": true
+}

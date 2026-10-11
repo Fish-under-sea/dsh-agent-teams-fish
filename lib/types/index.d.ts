@@ -21,6 +21,7 @@
 import type { Context } from '@deepseek-ai/cordis';
 import z from '@deepseek-ai/schemastery';
 import { type TeamProfileConfig } from './profiles.ts';
+import { type MemberToolPolicy } from './tool-policies.ts';
 export declare const name = "agent-teams";
 export declare const inject: string[];
 /** Plugin configuration. */
@@ -32,8 +33,22 @@ export interface Config {
     stateDir?: string;
     /** `ctx.subagents` provider used to spawn members; must support continuable children and personas (default `spawn`). */
     memberProvider?: string;
-    /** Optional model override applied to every member. */
+    /**
+     * Optional model override applied to every member. The id is used verbatim.
+     * When the captain's provider does not advertise it, the provider that does
+     * is resolved from the live catalogs (only if exactly one advertises it);
+     * set `memberLlmProvider` to name the owner explicitly instead.
+     */
     memberModel?: string;
+    /**
+     * LLM provider route that owns `memberModel`. Set this when the member model
+     * is served by a different provider than the captain's session; without it
+     * the captain's provider is only used if it actually advertises the model,
+     * and an ambiguous or unowned model fails with the provider catalogs instead
+     * of being silently paired with the captain's route (issue #189).
+     * Distinct from `memberProvider`, which is the subagent runtime backend.
+     */
+    memberLlmProvider?: string;
     /** Prompt injected into member personas and automatic task assignments. */
     executionPrompt?: string;
     /** Plugin-wide fallback route for unavailable member models. */
@@ -44,6 +59,16 @@ export interface Config {
     maxMembers?: number;
     /** Named multi-role team profiles. */
     profiles?: Record<string, TeamProfileConfig>;
+    /**
+     * Reusable per-member tool policies declared by the deployment owner (#59),
+     * keyed by policy id. A member selects one by id (`tool_policy` on
+     * `agent_teams_add_member`, a plan member, or a profile member row); the
+     * Captain model can select an existing policy but never submit raw lists.
+     * `allow` keeps only the named global tools (the four coordination tools are
+     * always added); `deny` removes the named global tools. Captain-only tools
+     * stay denied either way.
+     */
+    toolPolicies?: Record<string, MemberToolPolicy>;
     /** Prompt-section order for the usage policy (default `117`, after delegation policy). */
     promptSectionOrder?: number;
     /**

@@ -11,9 +11,10 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { ContentBlock, MessageId, MessageSource } from '@deepseek-ai/dsh-llm'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import * as dshSession from '@deepseek-ai/dsh-session'
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
 import { SubagentError } from '@deepseek-ai/dsh-subagent'
-import { CAPTAIN_TOOL_NAMES } from './tool-names.ts'
+import { BUILTIN_DENY_TOOLS, resolveMemberToolFilter, type MemberToolFilter } from './tool-policies.ts'
 
 /**
  * Exact protocol exported by dsh-subagent/internal in Alpha.5 and rc.1.
@@ -54,6 +55,51 @@ declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
     'agent-teams': { readonly kind: 'agent-teams' }
   }
+}
+
+/** Package identity a released plugin-wrapper source names on older hosts. */
+export const AGENT_TEAMS_PLUGIN_NAME = '@nanmicoder/dsh-agent-teams'
+
+/**
+ * First stored format generation whose migration edges admit producer-owned
+ * source kinds. The released v2→v3 payload audit validates every message source
+ * against a closed list of released kinds, so a stored format older than this
+ * must carry a released source or the whole session becomes unreadable once a
+ * newer host opens it (#160).
+ */
+export const RELEASED_SOURCE_VOCABULARY_VERSION = 3
+
+/** Source kinds this plugin mints on a host whose stored format admits them. */
+export type AgentTeamsSource =
+  | { readonly kind: 'agent-teams' }
+  | { readonly kind: 'agent-teams-command'; readonly goal?: string; readonly profile?: string }
+
+/** Stored session format generation of the running host; 0 when it exposes none. */
+export function hostSessionFormatVersion(): number {
+  const version = (dshSession as unknown as { SESSION_FORMAT_VERSION?: number }).SESSION_FORMAT_VERSION
+  return typeof version === 'number' && Number.isSafeInteger(version) && version >= 0 ? version : 0
+}
+
+/**
+ * Source for one AgentTeams-authored message on the running host.
+ *
+ * Current hosts mint producer-owned kinds: the Harness documents message
+ * sources as a merge-extensible vocabulary without a catch-all, so this plugin
+ * declares its own. Hosts that still store a pre-v3 generation are a different
+ * contract — their released v2→v3 migration rejects any source outside the
+ * released vocabulary, which is exactly how a plugin kind written on an older
+ * supported host poisons its session log for every later host. On those hosts
+ * the released plugin wrapper is used instead; the goal and profile already
+ * travel in the message text.
+ * @param modern - the producer-owned source to use where the host admits it.
+ * @returns a source accepted by the running host and by its migration chain.
+ */
+export function agentTeamsSource(modern: AgentTeamsSource): MessageSource {
+  if (hostSessionFormatVersion() >= RELEASED_SOURCE_VOCABULARY_VERSION) return modern
+  // Released-format hosts persist plugin-authored messages as this wrapper; the
+  // current vocabulary retired it, so the cast stays confined to this branch
+  // and `modern` is the only shape a current host ever sees.
+  return { kind: 'plugin', plugin: AGENT_TEAMS_PLUGIN_NAME } as unknown as MessageSource
 }
 
 /**
@@ -148,7 +194,7 @@ export async function queueMemberPrompt(
   content: ContentBlock[], signal: AbortSignal,
 ): Promise<MessageId> {
   const host = boundary(runtime)
-  const source: MessageSource = { kind: 'agent-teams' }
+  const source = agentTeamsSource({ kind: 'agent-teams' })
   if (typeof host.followup === 'function') {
     return host.followup.call(runtime, parent, childId, content, { source, signal })
   }
@@ -165,7 +211,7 @@ export async function steerMemberPrompt(
   content: ContentBlock[], signal: AbortSignal, live?: Agent,
 ): Promise<MessageId> {
   const host = boundary(runtime)
-  const source: MessageSource = { kind: 'agent-teams' }
+  const source = agentTeamsSource({ kind: 'agent-teams' })
   const deliver = host[hostPromptDeliver]
   if (typeof deliver === 'function') return deliver.call(runtime, parent, childId, content, source, signal, 'steer')
   if (typeof host.sendMessage === 'function') return host.sendMessage.call(runtime, parent, childId, content, { signal })
@@ -278,15 +324,12 @@ export function restrictableToolNames(agent: Agent): ReadonlySet<string> | undef
  * forwarding a name the host dropped aborts every member spawn (#163, #164).
  * Depth enforcement itself does not depend on these names —
  * installMemberDelegationGuard bounds descendant creation by parent chain.
+ *
+ * This is the legacy filter of a member without a configured tool policy; a
+ * selected policy resolves through `resolveMemberToolFilter` instead (#59).
  */
-export function memberToolFilter(maxDepth: number | undefined, knownTools: ReadonlySet<string> | undefined): { deny: string[] } {
-  const depthDeny = maxDepth === 0 ? ['subagent', 'send_message'] : []
-  return {
-    deny: [
-      ...CAPTAIN_TOOL_NAMES,
-      ...(knownTools === undefined ? depthDeny : depthDeny.filter(name => knownTools.has(name))),
-    ],
-  }
+export function memberToolFilter(maxDepth: number | undefined, knownTools: ReadonlySet<string> | undefined): MemberToolFilter {
+  return resolveMemberToolFilter(undefined, { maxDepth, knownTools })
 }
 
 /**
@@ -302,34 +345,48 @@ function unknownToolNames(error: unknown): string[] {
 }
 
 /**
- * Start one member, dropping any filter name the host reports as unknown and
- * retrying.
+ * Start one member, dropping only the built-in filter names the host reports
+ * as unknown and retrying.
  *
  * Resolving the filter against the registry view ({@link memberToolFilter})
  * only covers hosts that expose one. A rejected filter still leaves the member
  * without a session for the lifetime of the team, so the start must survive the
  * cases that resolution cannot see — no registry view, a name that is known but
  * not restrictable, a composition that mounted differently than expected. The
- * host names the offenders in its rejection, so they are removed and the start
- * retried; the retry only runs while the deny list strictly shrinks, and any
- * failure that is not an unknown-name report propagates untouched.
+ * host names the offenders in its rejection, so the relaxable ones are removed
+ * and the start retried.
+ *
+ * Only `relaxableDeny` names may be dropped, and only from `deny`. The default
+ * is exactly the built-in captain-only and depth entries (#163/#164); a name an
+ * owner-declared tool policy contributed is never removed, because silently
+ * spawning a member with a different filter than the owner declared is contract
+ * drift, not recovery. Dropping a denied name the host does not register
+ * changes nothing; dropping an allowed name would loosen the policy, so `allow`
+ * is never relaxed and the four required coordination tools can never be
+ * removed.
  * @param start - performs one start attempt for the given `toolFilter`.
  * @param filter - the filter to attempt first.
+ * @param relaxableDeny - built-in deny names the retry may drop.
  * @returns the started member.
  */
 export async function startMemberWithLenientFilter<T>(
-  start: (filter: { deny: string[] }) => Promise<T>,
-  filter: { deny: string[] },
+  start: (filter: MemberToolFilter) => Promise<T>,
+  filter: MemberToolFilter,
+  relaxableDeny: readonly string[] = BUILTIN_DENY_TOOLS,
 ): Promise<T> {
-  let deny = [...filter.deny]
+  const current: MemberToolFilter = {
+    ...filter.allow === undefined ? {} : { allow: [...filter.allow] },
+    deny: [...filter.deny],
+  }
   for (;;) {
     try {
-      return await start({ deny })
+      return await start(current)
     } catch (error: unknown) {
       const unknown = unknownToolNames(error)
-      const remaining = deny.filter(name => !unknown.includes(name))
-      if (unknown.length === 0 || remaining.length === deny.length) throw error
-      deny = remaining
+      if (unknown.length === 0) throw error
+      const droppable = unknown.filter(name => relaxableDeny.includes(name) && current.deny.includes(name))
+      if (droppable.length === 0) throw error
+      current.deny = current.deny.filter(name => !droppable.includes(name))
     }
   }
 }

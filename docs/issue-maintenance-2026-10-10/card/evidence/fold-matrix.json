@@ -1,0 +1,149 @@
+[
+  {
+    "case": "baseline",
+    "artifact": "baseline-artifact",
+    "hasMetaInLog": false,
+    "realTeamId": "数据团队",
+    "cardTeamId": "team",
+    "cardTeamName": "数据团队",
+    "cardCaptainSessionId": "",
+    "cardMembers": [],
+    "idMatchesLiveTeam": false,
+    "rosterFromRecord": false
+  },
+  {
+    "case": "baseline",
+    "artifact": "candidate-artifact",
+    "hasMetaInLog": false,
+    "realTeamId": "数据团队",
+    "cardTeamId": "数据团队",
+    "cardTeamName": "数据团队",
+    "cardCaptainSessionId": "",
+    "cardMembers": [],
+    "idMatchesLiveTeam": true,
+    "rosterFromRecord": false
+  },
+  {
+    "case": "candidate",
+    "artifact": "baseline-artifact",
+    "hasMetaInLog": true,
+    "realTeamId": "数据团队",
+    "cardTeamId": "team",
+    "cardTeamName": "数据团队",
+    "cardCaptainSessionId": "",
+    "cardMembers": [],
+    "idMatchesLiveTeam": false,
+    "rosterFromRecord": false
+  },
+  {
+    "case": "candidate",
+    "artifact": "candidate-artifact",
+    "hasMetaInLog": true,
+    "realTeamId": "数据团队",
+    "cardTeamId": "数据团队",
+    "cardTeamName": "数据团队",
+    "cardCaptainSessionId": "session-5b9c59ae-7b18-47ae-8b56-2cb4fe66b13c",
+    "cardMembers": [
+      "阿明/工程师",
+      "Léa/reviewer"
+    ],
+    "idMatchesLiveTeam": true,
+    "rosterFromRecord": true
+  },
+  {
+    "case": "candidate-long",
+    "artifact": "baseline-artifact",
+    "hasMetaInLog": true,
+    "realTeamId": "跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台-53b2181c",
+    "cardTeamId": "team",
+    "cardTeamName": "跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台数据治理专项验证小组",
+    "cardCaptainSessionId": "",
+    "cardMembers": [],
+    "idMatchesLiveTeam": false,
+    "rosterFromRecord": true
+  },
+  {
+    "case": "candidate-long",
+    "artifact": "candidate-artifact",
+    "hasMetaInLog": true,
+    "realTeamId": "跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台-53b2181c",
+    "cardTeamId": "跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台-53b2181c",
+    "cardTeamName": "跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台数据治理专项验证小组",
+    "cardCaptainSessionId": "session-4b48c399-499d-44e2-884f-5d05a52ba8b1",
+    "cardMembers": [],
+    "idMatchesLiveTeam": true,
+    "rosterFromRecord": true
+  },
+  {
+    "case": "legacy-long",
+    "artifact": "baseline-artifact",
+    "hasMetaInLog": false,
+    "realTeamId": "跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台-53b2181c",
+    "cardTeamId": "team",
+    "cardTeamName": "跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台数据治理专项验证小组",
+    "cardCaptainSessionId": "",
+    "cardMembers": [],
+    "idMatchesLiveTeam": false,
+    "rosterFromRecord": true
+  },
+  {
+    "case": "legacy-long",
+    "artifact": "candidate-artifact",
+    "hasMetaInLog": false,
+    "realTeamId": "跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台-53b2181c",
+    "cardTeamId": "跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台-53b2181c",
+    "cardTeamName": "跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台数据治理专项验证小组",
+    "cardCaptainSessionId": "",
+    "cardMembers": [],
+    "idMatchesLiveTeam": true,
+    "rosterFromRecord": true
+  },
+  {
+    "case": "legacy-emoji",
+    "artifact": "baseline-artifact",
+    "hasMetaInLog": false,
+    "realTeamId": "k-28f98294",
+    "cardTeamId": "team",
+    "cardTeamName": "🚀🎯",
+    "cardCaptainSessionId": "",
+    "cardMembers": [],
+    "idMatchesLiveTeam": false,
+    "rosterFromRecord": true
+  },
+  {
+    "case": "legacy-emoji",
+    "artifact": "candidate-artifact",
+    "hasMetaInLog": false,
+    "realTeamId": "k-28f98294",
+    "cardTeamId": "k-28f98294",
+    "cardTeamName": "🚀🎯",
+    "cardCaptainSessionId": "",
+    "cardMembers": [],
+    "idMatchesLiveTeam": true,
+    "rosterFromRecord": true
+  },
+  {
+    "case": "legacy-staged",
+    "artifact": "baseline-artifact",
+    "hasMetaInLog": false,
+    "realTeamId": "数据团队审核组",
+    "cardTeamId": "team",
+    "cardTeamName": "数据团队审核组",
+    "cardCaptainSessionId": "",
+    "cardMembers": [],
+    "idMatchesLiveTeam": false,
+    "rosterFromRecord": true
+  },
+  {
+    "case": "legacy-staged",
+    "artifact": "candidate-artifact",
+    "hasMetaInLog": false,
+    "realTeamId": "数据团队审核组",
+    "cardTeamId": "数据团队审核组",
+    "cardTeamName": "数据团队审核组",
+    "cardCaptainSessionId": "",
+    "cardMembers": [],
+    "idMatchesLiveTeam": true,
+    "rosterFromRecord": true
+  }
+]

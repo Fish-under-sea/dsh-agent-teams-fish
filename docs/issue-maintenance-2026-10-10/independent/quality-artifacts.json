@@ -1,0 +1,142 @@
+{
+  "capturedAt": "2026-10-10T15:58:26.608Z",
+  "cases": {
+    "sbc-candidate": {
+      "delivery": {
+        "ok": true,
+        "blockers": [],
+        "warnings": []
+      },
+      "loop": {
+        "state": "deliverable",
+        "halted": false,
+        "escalated": false,
+        "deliverable": true,
+        "summary": "All required work and quality gates passed. The captain may report delivery.",
+        "warnings": []
+      },
+      "escalated": false,
+      "tasks": [
+        {
+          "id": "t1",
+          "kind": "implementation",
+          "status": "completed"
+        },
+        {
+          "id": "t2",
+          "kind": "work",
+          "status": "completed"
+        },
+        {
+          "id": "t3",
+          "kind": "verification",
+          "status": "failed"
+        },
+        {
+          "id": "t4",
+          "kind": "review",
+          "status": "completed",
+          "verdict": "pass"
+        },
+        {
+          "id": "t5",
+          "kind": "repair",
+          "status": "completed",
+          "findingSourceTaskIds": [
+            "t3"
+          ]
+        },
+        {
+          "id": "t6",
+          "kind": "verification",
+          "status": "completed"
+        }
+      ]
+    },
+    "sc2-candidate": {
+      "delivery": {
+        "ok": true,
+        "blockers": [],
+        "warnings": []
+      },
+      "loop": {
+        "state": "deliverable",
+        "halted": false,
+        "escalated": false,
+        "deliverable": true,
+        "summary": "All required work and quality gates passed. The captain may report delivery.",
+        "warnings": []
+      },
+      "escalated": false,
+      "tasks": [
+        {
+          "id": "t1",
+          "kind": "implementation",
+          "status": "completed"
+        },
+        {
+          "id": "t2",
+          "kind": "work",
+          "status": "completed"
+        },
+        {
+          "id": "t3",
+          "kind": "verification",
+          "status": "failed"
+        },
+        {
+          "id": "t4",
+          "kind": "review",
+          "status": "completed",
+          "verdict": "pass"
+        },
+        {
+          "id": "t5",
+          "kind": "repair",
+          "status": "completed",
+          "findingSourceTaskIds": [
+            "t3"
+          ]
+        },
+        {
+          "id": "t6",
+          "kind": "verification",
+          "status": "completed"
+        }
+      ]
+    },
+    "i183-candidate2": {
+      "delivery": {
+        "ok": false,
+        "blockers": [
+          "team requires escalation resolution",
+          "t2 failed without a follow-up repair",
+          "completed implementation has no passing review"
+        ],
+        "warnings": []
+      },
+      "loop": {
+        "state": "escalated",
+        "halted": false,
+        "escalated": true,
+        "deliverable": false,
+        "summary": "Automatic review/repair loop hit its ceiling. The team is still running; do not treat this as halt. Escalate to the user instead of inventing another needs_revision cycle. Genuinely unresolved gates: t2 (review); any failed gate not listed here already has a follow-up repair.",
+        "warnings": []
+      },
+      "escalated": true,
+      "tasks": [
+        {
+          "id": "t1",
+          "kind": "implementation",
+          "status": "completed"
+        },
+        {
+          "id": "t2",
+          "kind": "review",
+          "status": "failed",
+          "verdict": "needs_revision"
+        }
+      ]
+    }
+  }
+}

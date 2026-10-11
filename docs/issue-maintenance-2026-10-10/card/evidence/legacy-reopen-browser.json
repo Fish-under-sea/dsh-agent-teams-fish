@@ -1,0 +1,37 @@
+{
+  "purpose": "Reviewer follow-up: reopening logs recorded BEFORE the fix (no tool/result meta) must resolve the real team and must not add a fake historic panel entry.",
+  "build": "candidate (lib/client.js after the text-fallback change); GUI reloaded so the rebuilt bundle is active",
+  "instance": "http://127.0.0.1:3099 (own isolated instance; supervisor GUI 3081 untouched)",
+  "sessions": [
+    {
+      "label": "legacy-baseline",
+      "sessionId": "session-d5eada7e-626d-4498-b8a1-c43ce84681fb",
+      "record": "real pre-fix run, no meta, team name 数据团队",
+      "card": {"teamId": "数据团队", "text": "数据团队2 名成员查看团队阿明Léa"},
+      "panel": {"sections": [{"teamId": "数据团队", "historic": false, "text": "数据团队2 名成员0/0 完成0 条消息…已派发 0 项任务给 2 名成员"}], "ghostEntries": []},
+      "baselineComparison": "the same session rendered data-team-id=team / 0 名成员 and a 数据团队 历史记录 ghost entry before the fix (evidence/baseline-browser.json, baseline-panel.png)"
+    },
+    {
+      "label": "legacy-emoji",
+      "sessionId": "session-aa175fc6-b99a-4c53-bf1d-d662d2dc7242",
+      "record": "real pre-fix run, no meta, team name 🚀🎯",
+      "card": {"teamId": "k-28f98294", "text": "🚀🎯0 名成员查看团队"},
+      "panel": {"sections": [{"teamId": "k-28f98294", "historic": false}], "ghostEntries": []}
+    },
+    {
+      "label": "legacy-staged",
+      "sessionId": "session-db4ae894-6d73-4c6c-956f-ccf6f8657b39",
+      "record": "real pre-fix run, no meta, approval=required staged plan, team name 数据团队审核组",
+      "card": {"teamId": "数据团队审核组", "text": "数据团队审核组0 名成员查看团队"},
+      "panel": {"sections": [{"teamId": "数据团队审核组", "historic": false, "text": "…执行前计划审查…待确认成员尚未创建"}], "ghostEntries": []}
+    },
+    {
+      "label": "legacy-long",
+      "sessionId": "session-c2ca852c-e28e-48cd-aecd-9d754fcdc80f",
+      "record": "real pre-fix run, no meta, 58-codepoint CJK name (host truncates to 48 + digest)",
+      "card": {"teamId": "跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台-53b2181c", "text": "…专项验证小组0 名成员查看团队"},
+      "panel": {"sections": [{"teamId": "跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台-53b2181c", "historic": false}], "ghostEntries": []}
+    }
+  ],
+  "screenshots": ["legacy-reopen-fixed.png"]
+}

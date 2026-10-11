@@ -1,0 +1,19 @@
+{
+  "capturedAt": "2026-10-10T15:25:09.786Z",
+  "cards": [
+    {
+      "tag": "SECTION",
+      "id": "数据团队",
+      "text": "数据团队\n2 名成员\n查看团队\n阿明\nLéa"
+    },
+    {
+      "tag": "SECTION",
+      "id": "数据团队",
+      "text": "数据团队\n2 名成员\n0/0 完成\n0 条消息\n队长\n拆解 · 派发 · 汇总\n已派发 0 项任务给 2 名成员\n等待回报\n总进度\n■ 进行中 0\n■ 等待依赖 0\n■ 已交付 0\n等待队长拆解任务\n2 名成员\n收起\n阿明\n工程师\ndeepseek-flash\n待派工\n等待队长派工\n0/0\n队长派发\n暂无任务\nLéa\nreviewer\ndeepseek-fl"
+    }
+  ],
+  "historyText": [],
+  "teams": [
+    "队长拆解 · 派发 · 汇总已派发 0 项任务给 2 名成员等待回报总进度■ 进行中 0■ 等待依赖 0■ 已交付 0等待队长拆解任务2 名成员收起阿明工程师deepseek-flash待派工等待队长派工0/0队长派发暂无任务Léareviewerdeepseek-flash待派工等待队长派工0/0队长派发暂无任务"
+  ]
+}

@@ -6,6 +6,12 @@
   <img src="./assets/readme/hero.svg" width="100%" alt="dsh-agent-teams 把一个 DeepSeek Harness 会话变成可协作的多智能体团队">
 </p>
 
+<div align="center">
+
+[![AtomGit](https://atomgit.com/NanmiCoder/dsh-agent-teams/star/new_badge.svg)](https://atomgit.com/NanmiCoder/dsh-agent-teams)
+
+</div>
+
 <p align="center">
   <a href="https://dshfind.com/zh/plugins/NanmiCoder/dsh-agent-teams?ref=badge"><img src="https://img.shields.io/badge/%E7%94%B1%20dshfind-%E6%8E%A8%E8%8D%90-FFD700?style=flat-square" alt="由 dshfind 推荐"></a>
   <a href="https://dshfind.com/zh/plugins/NanmiCoder/dsh-agent-teams?ref=badge"><img src="https://dshfind.com/api/badge/NanmiCoder/dsh-agent-teams?lang=zh" alt="dshfind 评分"></a>
@@ -30,7 +36,7 @@
 
 ## 版本更新
 
-[v0.1.22](./release-notes/v0.1.22.md) 切换到已发布的 Harness `0.2.0-rc.2`，保留无需构建脚本的 Git 安装。本插件正式版使用 npm `latest` 渠道；推荐搭配 Harness `0.2.0-rc.2`（宿主的 `next` 渠道）。精确支持范围见 [compatibility.json](./compatibility.json)。
+[v0.1.23](./release-notes/v0.1.23.md) 修复团队标识、成员模型路由、质量与修复门禁及 fork 冷恢复，并新增由工作区所有者配置的成员工具策略。本插件正式版使用 npm `latest` 渠道；推荐宿主仍为 Harness `0.2.0-rc.2`（宿主的 `next` 渠道）。精确支持范围见 [compatibility.json](./compatibility.json)。
 
 ## 为什么需要 AgentTeams？
 
@@ -48,23 +54,23 @@
 
 ## 安装与版本选择
 
-**推荐组合：DeepSeek Harness `0.2.0-rc.2` + AgentTeams `0.1.22`。宿主仍为 RC 版本。**
+**推荐组合：DeepSeek Harness `0.2.0-rc.2` + AgentTeams `0.1.23`。宿主仍为 RC 版本。**
 
 | 使用场景 | DeepSeek Harness | AgentTeams 插件 |
 | --- | --- | --- |
-| **推荐版本** | **`0.2.0-rc.2`** | **`0.1.22`** |
-| 上一推荐 RC | `0.1.7-rc.2` | `0.1.22` |
-| 保留旧 RC | `0.1.5-rc.1`, `0.1.5-rc.2`, `0.1.5-rc.3` | `0.1.22` |
-| 保留旧 RC | `0.1.2-rc.1` | `0.1.22` |
-| 开发者测试 Alpha | `0.1.2-alpha.5` | `0.1.22` |
-| 保留旧 Alpha | `0.1.2-alpha.2` | `0.1.22` |
+| **推荐版本** | **`0.2.0-rc.2`** | **`0.1.23`** |
+| 上一推荐 RC | `0.1.7-rc.2` | `0.1.23` |
+| 保留旧 RC | `0.1.5-rc.1`, `0.1.5-rc.2`, `0.1.5-rc.3` | `0.1.23` |
+| 保留旧 RC | `0.1.2-rc.1` | `0.1.23` |
+| 开发者测试 Alpha | `0.1.2-alpha.5` | `0.1.23` |
+| 保留旧 Alpha | `0.1.2-alpha.2` | `0.1.23` |
 
 ### 桌面端
 
 在应用侧栏打开「插件 → 添加插件」，输入 npm 包名和版本：
 
 ```text
-@nanmicoder/dsh-agent-teams@0.1.22
+@nanmicoder/dsh-agent-teams@0.1.23
 ```
 
 安装完成后点击「立即启用」；宿主提示需要重启时，重启桌面应用。发布版请使用上面的包名，npm 或 GitHub 网页链接与 npm 包名不是同一种安装来源。从 Git 安装时，请选用包含下方所述已验证构建产物的提交。
@@ -85,7 +91,7 @@ dsh --version
 从 npm 安装或升级插件（命令锁定本次 `latest` 正式版）：
 
 ```sh
-dsh plugin --profile web add --save-exact @nanmicoder/dsh-agent-teams@0.1.22
+dsh plugin --profile web add --save-exact @nanmicoder/dsh-agent-teams@0.1.23
 ```
 
 CLI 管理的安装可将 `web` 换成实际使用的 CLI profile。**安装后，停止并重新启动该 profile 的 Harness 进程，再刷新浏览器。** 安装插件不会自动升级宿主；Harness 的 `latest` 与插件的 `latest` 是两个独立渠道。
@@ -147,9 +153,25 @@ CLI 管理的安装可将 `web` 换成实际使用的 CLI profile。**安装后�
     memberModel: deepseek-v4
     memberMaxDepth: 0
     maxMembers: 8
+    toolPolicies:
+      researcher:
+        allow: [read, glob, grep]
+      implementer:
+        deny: [web_search]
 ```
 
 `memberMaxDepth` 默认 `0`，团队成员不能再创建子代理；显式设为 `1` 可允许一层后代，运行时和代码工具调用同样受限。默认成员统一通过团队消息汇报，避免再走宿主消息重复通知队长。无任务成员不调用模型；任务分配开启独立轮次，纠正消息进入最近的模型步骤。消息投递与读取分别记录；移除和归档必须等成员分支及待处理输入清理完成后才报告成功。
+
+`toolPolicies` 是部署方配置：按 id 复用的成员工具策略。成员只能“按 id 选择”——`agent_teams_add_member` 的 `tool_policy`、内联 `plan` 的成员行，或 profile 成员行的 `tool_policy`。队长模型只能选择已声明的策略，不能提交原始 allow/deny 列表，也不能在运行时新建策略。
+
+- `deny` 让指定全局工具从该成员的 schema 中消失，并拒绝其调用。
+- `allow` 只保留列出的全局工具；四个协调工具（`agent_teams_claim_task`、`agent_teams_update_task`、`agent_teams_send_message`、`agent_teams_status`）始终会被加入 allow 列表。
+- 队长专属工具始终被拒绝，策略无法重新打开；策略也不允许拒绝必须保留的协调工具。
+- 未知 id、空策略、空列表会在挂载时或写入成员前直接失败。
+- `agent_teams_status` 会显示每个成员选择的策略 id；完整生效过滤器保存在 `team.json` 供审计，重启后由子会话的持久 descriptor 重新应用。
+- 未配置策略的团队与成员保持原有工具集和记录结构；`agent_teams_edit_plan` 传空 `tool_policy` 可清除暂存成员的策略。
+
+这是全局工具的模型可见性与调用限制，不是 OS 沙箱，也不是授权边界。
 
 普通调研、仓库审计可用 `agent_teams_create({name, description, approval:"required", plan:{members:[{name:"researcher"}], tasks:[{id:"audit", subject:"审计现有实现", assignee:"researcher"}]}})` 一次创建完整草案。任务的 `dependencies` 引用同一批中的 `id`，支持前向引用并校验环；结果返回实际任务 ID。`kind=review` 专用于对既有 implementation/repair 任务的质量复审，普通仓库审计使用默认的 `kind=work`。
 

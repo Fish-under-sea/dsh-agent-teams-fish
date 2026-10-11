@@ -65,6 +65,7 @@ export interface DispatchTicket {
     readonly acceptance?: readonly string[];
     readonly verify?: readonly string[];
     readonly reviewedTaskId?: string;
+    readonly findingSourceTaskIds?: readonly string[];
 }
 /**
  * Recursively collect `status=completed` ancestors of `taskId` in topological
@@ -73,6 +74,6 @@ export interface DispatchTicket {
 export declare function collectCompletedDependencyOutputs(tasks: readonly TeamTask[], taskId: string, warn?: (message: string) => void): DependencyOutput[];
 /** Format completed-dependency outputs with per-item and total truncation. */
 export declare function formatDependencyOutputs(items: readonly DependencyOutput[]): string;
-export declare function assignmentPrompt(ticket: DispatchTicket, stateDir: string, teamId: string): string;
+export declare function assignmentPrompt(ticket: DispatchTicket, stateDir: string, teamId: string, workOrderWarnings?: readonly string[]): string;
 /** Install one scheduler and its member activity observer. */
 export declare function installTeamScheduler(ctx: Context, config: SchedulerConfig): TeamScheduler;

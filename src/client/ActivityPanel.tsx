@@ -201,6 +201,9 @@ function taskTitle(task: ActivityTask, model: string): string {
     task.kind,
     task.round === undefined ? undefined : `r${task.round}`,
     task.verdict,
+    // Never show a bare pass: the audited verdict may no longer describe the
+    // bytes currently on disk (issue #161).
+    task.verdictStale === undefined ? undefined : `⚠ ${task.verdictStale}`,
     model === '' ? undefined : model,
   ].filter((item): item is string => item !== undefined)
   return extras.length === 0 ? `${task.id} · ${task.subject}` : `${task.id} · ${task.subject} · ${extras.join(' · ')}`
@@ -455,6 +458,7 @@ function DependencyMap({ tasks, members, t, discarded = false, workspace = false
                       : { left: x, top: y, width: nodeWidth, height: nodeHeight }}
                     data-task-id={task.id}
                     data-state={discarded ? 'cancelled' : taskTone(task.state, task.status)}
+                    data-verdict-stale={task.verdictStale === undefined ? undefined : 'true'}
                     data-task-model={model || undefined}
                     data-focused={related?.has(task.id) ?? false}
                     data-dimmed={related !== null && !related.has(task.id)}
@@ -813,6 +817,7 @@ export function TeamSection({ team, modelDirectory, onContinuePlanning, onDiscar
                               key={task.id}
                               className={css.assignmentChip}
                               data-state={discarded ? 'cancelled' : taskTone(task.state, task.status)}
+                              data-verdict-stale={task.verdictStale === undefined ? undefined : 'true'}
                               data-task-model={model || undefined}
                               title={taskTitle(task, model)}
                             >

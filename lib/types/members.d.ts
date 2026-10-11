@@ -14,6 +14,7 @@
 import type { Context } from '@deepseek-ai/cordis';
 import { type Agent } from '@deepseek-ai/dsh-agent';
 import type { Session } from '@deepseek-ai/dsh-session';
+import type { MemberToolFilter } from './tool-policies.ts';
 import { type TeamMember, type TeamState, type TeamTask } from './types.ts';
 /** Persona snapshot of a profile protocol; the full text lives on team.json. */
 export declare const PERSONA_PROTOCOL_MAX_CHARS = 400;
@@ -70,6 +71,8 @@ export interface MemberLlmSelectionRequest {
     model?: string;
     /** Plugin-level member model default. */
     defaultModel?: string;
+    /** Configured member LLM provider, paired with `defaultModel` (issue #189). */
+    defaultProvider?: string;
     /** Explicit reasoning effort; "default" selects the target model's default effort. */
     reasoningEffort?: string;
     /** Configured fallback route. */
@@ -78,6 +81,45 @@ export interface MemberLlmSelectionRequest {
         model: string;
     };
 }
+/** A composed member route plus where each half came from. */
+export interface MemberRouteResolution {
+    readonly provider: {
+        readonly value: string;
+        readonly source: 'request' | 'config' | 'captain';
+    };
+    readonly model: {
+        readonly value: string;
+        readonly source: 'request' | 'config' | 'captain';
+    };
+    /**
+     * Whether the provider half was *derived* rather than named. Only a
+     * model-only plugin default may have its owner looked up in the provider
+     * catalogs; a provider or model the caller named is never re-pointed.
+     */
+    readonly derivedProvider: boolean;
+}
+/**
+ * Compose one member route from request, plugin configuration and the captain
+ * session, without performing any I/O. This is the single place where the
+ * precedence between the captain's route and a configured member default is
+ * decided, so a configured model can never be silently paired with whichever
+ * provider the captain happens to sit on (issue #189).
+ *
+ * Precedence: explicit request > plugin configuration > captain session. Model
+ * ids are used verbatim: a `/` inside a model id is part of that id and is
+ * never treated as a provider separator.
+ *
+ * `derivedProvider` is true only for a bare configured `memberModel` with no
+ * provider anywhere, which is the one shape whose owner must come from the
+ * provider catalogs.
+ * @param request - the captain-supplied and plugin-configured route halves.
+ * @param captain - the captain's current session route.
+ * @returns the composed route, or `undefined` when a half cannot be determined.
+ */
+export declare function composeMemberRoute(request: Pick<MemberLlmSelectionRequest, 'provider' | 'model' | 'defaultModel' | 'defaultProvider'>, captain: {
+    readonly provider: string;
+    readonly model: string;
+}): MemberRouteResolution | undefined;
 /** Process-local bridge between spawn admission and synchronous child setup. */
 export interface MemberSelectionRuntime {
     /** Trusted fresh-child admission, before the durable member id is written. */
@@ -115,6 +157,58 @@ interface FailedMemberAttempt {
     readonly memberId: string;
     readonly task?: Pick<TeamTask, 'id' | 'attempt' | 'attemptId'>;
 }
+/** How a final member turn failure relates to the durable record. */
+export type MemberFailureDisposition = 
+/** A live observed attempt was failed and its task marked failed. */
+'failed_attempt'
+/** The work had already settled; only a durable captain note was added. */
+ | 'noted_settled'
+/** No record: stale generation, superseded attempt, retired member, or no team. */
+ | 'ignored';
+/**
+ * Classify a final member turn failure against the durable record. Pure, so the
+ * policy is testable without a lock or a Harness.
+ *
+ * A failure may only mutate the attempt the plugin actually observed. When that
+ * attempt is gone — the member moved on to newer work, the task was
+ * reassigned to a newer attempt, or the member generation was replaced — the
+ * late error carries no authority and stays silent. When the failure belongs to
+ * the current generation but its work already settled, the task and member are
+ * left exactly as they are and only a durable captain note is added: otherwise
+ * an operator cannot tell a clean run from one whose member's last turn died
+ * (429, auth failure, crash) after the delivery landed (issue #205).
+ * @param observed - the live member/task capability captured at the error event.
+ * @param current - the current durable member record and open task, if any.
+ * @returns the disposition for this failure.
+ */
+export declare function classifyMemberFailure(observed: FailedMemberAttempt, current: {
+    readonly member?: Pick<TeamMember, 'id' | 'status'> | undefined;
+    readonly task?: Pick<TeamTask, 'id' | 'attempt' | 'attemptId'> | undefined;
+    /** The durable record of the task the observation referred to, settled or not. */
+    readonly observedRecord?: Pick<TeamTask, 'id' | 'status' | 'subject'> | undefined;
+}): MemberFailureDisposition;
+/**
+ * The surviving durable record of the capability observed at the error event,
+ * or `undefined` when there is nothing honest to say about it.
+ *
+ * A task is only described as *settled* when its durable status is terminal
+ * (`completed`/`failed`/`cancelled`). A non-terminal record — for example a task
+ * that was claimed and then unclaimed or reassigned while the error was queued —
+ * must fall back to the plain "no open attempt" wording instead of implying a
+ * delivery landed.
+ */
+export declare function settledTaskRecord(observed: Pick<TeamTask, 'id'> | undefined, tasks: readonly Pick<TeamTask, 'id' | 'status' | 'subject'>[]): Pick<TeamTask, 'id' | 'status' | 'subject'> | undefined;
+/**
+ * Build the durable captain note for one recorded failure. Pure, so the wording
+ * boundaries are testable without a lock or a Harness.
+ * @param memberName - the member that failed.
+ * @param summary - the failure message plus its code.
+ * @param disposition - what the failure was allowed to do.
+ * @param task - the open attempt that was failed, when there was one.
+ * @param settledRecord - the terminal record of the observed task, when it exists.
+ * @returns the exact message the captain will read.
+ */
+export declare function memberFailureMessage(memberName: string, summary: string, disposition: MemberFailureDisposition, task: Pick<TeamTask, 'id' | 'subject'> | undefined, settledRecord: Pick<TeamTask, 'id' | 'status' | 'subject'> | undefined): string;
 /** Record a final turn failure, never an intermediate request retry. */
 export declare function failMemberOpenAttempt(ctx: Context, stateRoot: string, teamId: string, memberName: string, failure: {
     readonly code: string;
@@ -128,6 +222,15 @@ export declare function failMemberOpenAttempt(ctx: Context, stateRoot: string, t
  * An explicit effort overrides either policy; the sentinel "default" also
  * selects the target model's default. The final effort is validated against
  * the target model before a child is created.
+ *
+ * A configured `memberModel` is a route preference, not a blind model-id
+ * override: it is paired with `memberLlmProvider` (or its own `provider/model`
+ * form) when configured, and when only a bare model id is configured it is
+ * adopted by the captain's provider only if that provider actually advertises
+ * it. Otherwise the catalog decides: exactly one advertising provider wins,
+ * none or several produce an actionable error listing them (issue #189). A
+ * provider the caller *named* — explicitly or via configuration — is never
+ * silently switched away from.
  */
 export declare function resolveMemberLlmSelection(ctx: Context, captain: Agent, request: MemberLlmSelectionRequest, signal?: AbortSignal): Promise<MemberLlmSelection>;
 /**
@@ -167,8 +270,16 @@ export declare function memberWelcome(team: TeamState, memberName: string): stri
  * @param member - the member draft whose `id` is filled on success.
  * @param stateDir - configured state directory (for the persona).
  * @param signal - caller cancellation, forwarded to the start.
+ * @param initialPrompt - first turn text; the welcome message when omitted.
+ * @param resolvedFilter - the member's effective tool filter (a selected
+ *   policy, or the legacy captain-only filter when the member has none). The
+ *   caller resolves it so `spawnMember` forwards exactly one immutable filter
+ *   to `startContinuable`.
+ * @param relaxableDeny - deny names the lenient retry may drop for this
+ *   member; the caller narrows it for a policy member so a name the owner
+ *   declared is never silently removed.
  */
-export declare function spawnMember(ctx: Context, config: MemberRuntimeConfig, selections: MemberSelectionRuntime, llmSelection: MemberLlmSelection, captain: Agent, team: TeamState, member: TeamMember, stateDir: string, signal: AbortSignal, initialPrompt?: string): Promise<void>;
+export declare function spawnMember(ctx: Context, config: MemberRuntimeConfig, selections: MemberSelectionRuntime, llmSelection: MemberLlmSelection, captain: Agent, team: TeamState, member: TeamMember, stateDir: string, signal: AbortSignal, initialPrompt?: string, resolvedFilter?: MemberToolFilter, relaxableDeny?: readonly string[]): Promise<void>;
 /**
  * Deliver one message to a member as its next FIFO turn. Best effort: a
  * failure (member gone or not continuable) is logged and reported as `false`

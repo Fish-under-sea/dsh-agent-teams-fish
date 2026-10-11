@@ -1,0 +1,16 @@
+{
+  "capturedAt": "2026-10-10T15:12:00Z",
+  "url": "http://127.0.0.1:3099 (own isolated instance, candidate build)",
+  "card": {
+    "dataTeamId": "数据团队",
+    "text": "数据团队2 名成员查看团队阿明Léa",
+    "memberButtons": 3
+  },
+  "panel": {
+    "sections": [
+      {"teamId": "数据团队", "inCard": false, "historic": false, "text": "数据团队2 名成员0/0 完成0 条消息…已派发 0 项任务给 2 名成员"}
+    ],
+    "ghostSwitcherEntries": 0
+  },
+  "screenshots": ["candidate-card.png", "candidate-panel.png"]
+}

@@ -1,0 +1,56 @@
+{
+  "checkedAt": "2026-10-10T15:20:09.455Z",
+  "artifact": "lib/client/agent-teams-card-definition.js (candidate build)",
+  "results": [
+    {
+      "name": "legacy text of baseline yields the on-disk team id",
+      "passed": true,
+      "detail": "数据团队 === 数据团队"
+    },
+    {
+      "name": "legacy text of legacy-long yields the on-disk team id",
+      "passed": true,
+      "detail": "跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台-53b2181c === 跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台数据治理跨区域研发效能平台-53b2181c"
+    },
+    {
+      "name": "legacy text of legacy-emoji yields the on-disk team id",
+      "passed": true,
+      "detail": "k-28f98294 === k-28f98294"
+    },
+    {
+      "name": "legacy text of legacy-staged yields the on-disk team id",
+      "passed": true,
+      "detail": "数据团队审核组 === 数据团队审核组"
+    },
+    {
+      "name": "name-injection look-alike does not win over the canonical segment",
+      "passed": true,
+      "detail": "real-team"
+    },
+    {
+      "name": "text without the canonical segment yields undefined",
+      "passed": true,
+      "detail": "undefined"
+    },
+    {
+      "name": "absent/blank metadata is rejected",
+      "passed": true,
+      "detail": "[null,null,null,null,null]"
+    },
+    {
+      "name": "host metadata wins over the legacy text",
+      "passed": true,
+      "detail": "{\"teamId\":\"from-meta\",\"name\":\"数据团队\",\"accepted\":true,\"captainSessionId\":\"cap\",\"members\":[{\"id\":\"\",\"name\":\"n\",\"role\":\"r\"}]}"
+    },
+    {
+      "name": "failed create result produces no card",
+      "passed": true,
+      "detail": "{\"teamId\":\"数据团队\",\"name\":\"数据团队\",\"accepted\":false,\"captainSessionId\":\"\",\"members\":[]}"
+    },
+    {
+      "name": "resultText concatenates text blocks only",
+      "passed": true,
+      "detail": "a\nb"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "originalSha256": "4bddceca25e07e5aba6d0d403f62b7d468be9030be9b26d1d904aa3f71c27123",
+  "changedSha256": "fcd621fee612d2fcc873dfde7423d1b4389c06b02f100e684279ef82dffb3758",
+  "before": {
+    "ok": true,
+    "blockers": [],
+    "warnings": []
+  },
+  "after": {
+    "ok": false,
+    "blockers": [
+      "t3 (review) verdict covers a revision that no longer exists: lib/sum.js changed (sha256 4bddceca -> fcd621fe) — re-review the current bytes; do not report this revision as verified",
+      "t5 (verification) verdict covers a revision that no longer exists: lib/sum.js changed (sha256 4bddceca -> fcd621fe) — re-verify the current bytes; no later sound verdict bound them"
+    ],
+    "warnings": []
+  },
+  "basicTestExit": 0,
+  "strictTestExit": 0,
+  "mutation": "appended comment only",
+  "restored": {
+    "ok": true,
+    "blockers": [],
+    "warnings": []
+  },
+  "restoredSha256": "4bddceca25e07e5aba6d0d403f62b7d468be9030be9b26d1d904aa3f71c27123"
+}

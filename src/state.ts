@@ -17,8 +17,10 @@ import { createHash, randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { TERMINAL_TASK_STATUSES, type TaskStatus, type TeamMember, type TeamMessage, type TeamProfileSnapshot, type TeamState, type TeamTask } from './types.ts'
-import { hasValidQualityTaskFields, isReviewPolicy, normalizeBlankOptionalTaskFields } from './quality-gates.ts'
+import type { MemberToolFilter } from './tool-policies.ts'
+import { FINDING_SEVERITIES, REVIEW_VERDICTS, TASK_KINDS, TERMINAL_TASK_STATUSES, type ReviewFinding, type TaskStatus, type TeamMember, type TeamMessage, type TeamProfileSnapshot, type TeamState, type TeamTask } from './types.ts'
+import { hasValidQualityTaskFields, isReviewPolicy, isValidFindingLine, normalizeBlankOptionalTaskFields } from './quality-gates.ts'
+import { teamLeadMatch, type LeadIdentity } from './lineage.ts'
 
 export {
   amendTaskContract,
@@ -32,7 +34,9 @@ export {
   hasValidQualityTaskFields,
   isQualityKind,
   isTaskRevision,
+  isValidFindingLine,
   normalizeBlankOptionalTaskFields,
+  normalizeSentinelNumericTaskFields,
   pathMatchesScope,
   planQualityFollowUp,
   qualityPlanningPrompt,
@@ -244,7 +248,7 @@ export async function readTeam(stateRoot: string, teamId: string): Promise<TeamS
     const value: unknown = JSON.parse(stripLeadingBom(raw))
     const team = coerceTeamState(value, teamId)
     if (team === undefined) {
-      throw new Error(`invalid AgentTeams state in team "${teamId}"`)
+      throw new Error(`invalid AgentTeams state in team "${teamId}": ${describeTeamStateDefect(value, teamId)}`)
     }
     return team
   } catch (error: unknown) {
@@ -270,7 +274,7 @@ export function readTeamSync(stateRoot: string, teamId: string): TeamState | und
     const value: unknown = JSON.parse(stripLeadingBom(raw))
     const team = coerceTeamState(value, teamId)
     if (team === undefined) {
-      throw new Error(`invalid AgentTeams state in team "${teamId}"`)
+      throw new Error(`invalid AgentTeams state in team "${teamId}": ${describeTeamStateDefect(value, teamId)}`)
     }
     return team
   } catch (error: unknown) {
@@ -337,11 +341,14 @@ export async function recordRetiredMemberIds(stateRoot: string, memberIds: reado
  * Find the team owned by one captain session (at most one per captain).
  * @param stateRoot - resolved absolute state root directory.
  * @param captainSessionId - the owning session id.
+ * @param lead - durable lead identity of the calling session, when it may lead
+ *   through a fork chain; omitted keeps the exact-id contract.
  * @returns the team record, or undefined when the captain leads no team.
  */
 export async function findTeamByCaptain(
   stateRoot: string,
   captainSessionId: string,
+  lead?: LeadIdentity,
 ): Promise<TeamState | undefined> {
   let entries
   try {
@@ -356,7 +363,8 @@ export async function findTeamByCaptain(
   for (const entry of entries) {
     if (!entry.isDirectory()) continue
     const team = await readTeam(stateRoot, entry.name)
-    if (team?.captainSessionId === captainSessionId) {
+    if (team !== undefined && (team.captainSessionId === captainSessionId
+      || (lead !== undefined && teamLeadMatch(team, lead)))) {
       if (found !== undefined && found.id !== team.id) {
         throw new Error(`captain session leads multiple active teams ("${found.id}", "${team.id}"); archive one before continuing`)
       }
@@ -368,15 +376,18 @@ export async function findTeamByCaptain(
 
 /**
  * Find the team in which one session is an active participant.
- * Captains match `captainSessionId`; members match their durable child session
- * id. Removed members no longer have access to team-scoped tools.
+ * Captains match `captainSessionId` — including a lead session that inherited
+ * it through a fork — and members match their durable child session id.
+ * Removed members no longer have access to team-scoped tools.
  * @param stateRoot - resolved absolute state root directory.
  * @param agentSessionId - calling captain/member session id.
+ * @param lead - durable lead identity of the calling session, when available.
  * @returns the team record, or undefined when the caller belongs to no team.
  */
 export async function findTeamByParticipant(
   stateRoot: string,
   agentSessionId: string,
+  lead?: LeadIdentity,
 ): Promise<TeamState | undefined> {
   let entries
   try {
@@ -391,8 +402,9 @@ export async function findTeamByParticipant(
   for (const entry of entries) {
     if (!entry.isDirectory()) continue
     const team = await readTeam(stateRoot, entry.name)
-    const participates = team?.captainSessionId === agentSessionId
-      || team?.members.some((member) => member.id === agentSessionId && member.status !== 'removed') === true
+    const participates = team !== undefined && (team.captainSessionId === agentSessionId
+      || (lead !== undefined && teamLeadMatch(team, lead))
+      || team.members.some((member) => member.id === agentSessionId && member.status !== 'removed'))
     if (participates && team !== undefined) {
       if (found !== undefined && found.id !== team.id) {
         throw new Error(`agent session belongs to multiple active teams ("${found.id}", "${team.id}"); the target team is ambiguous`)
@@ -713,6 +725,38 @@ function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === 'string'
 }
 
+/** Whether a value is a non-empty (non-blank) string. */
+function nonemptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim() !== ''
+}
+
+/** Whether a value is an absent or non-blank string (a persisted id/name). */
+function isOptionalNonBlankString(value: unknown): value is string | undefined {
+  return value === undefined || (typeof value === 'string' && value.trim() !== '')
+}
+
+/** Whether a value is a non-empty list of non-blank tool names. */
+function isToolNameList(value: unknown): value is string[] {
+  return Array.isArray(value)
+    && value.length > 0
+    && value.every(name => typeof name === 'string' && name.trim() !== '')
+}
+
+/**
+ * Validate one persisted effective tool filter (#59). `deny` is part of the
+ * contract and never empty (the captain-only deny list is always included); an
+ * `allow` list, when present, is non-empty for the same reason. A wrong-typed
+ * or empty list is rejected instead of being silently accepted at the durable
+ * boundary — the same class of drift #188 fixed for team records.
+ */
+function isMemberToolFilter(value: unknown): value is MemberToolFilter {
+  if (!isRecord(value)) return false
+  const allow = value['allow']
+  const deny = value['deny']
+  if (allow !== undefined && !isToolNameList(allow)) return false
+  return isToolNameList(deny)
+}
+
 /** Whether a value is a finite timestamp/counter number. */
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
@@ -735,6 +779,9 @@ function isTeamMember(value: unknown): value is TeamMember {
     && (value['executionPrompt'] === undefined || typeof value['executionPrompt'] === 'string')
     && (value['fallback'] === undefined || (isRecord(value['fallback']) && typeof value['fallback']['provider'] === 'string' && typeof value['fallback']['model'] === 'string'))
     && (value['fallbackActive'] === undefined || typeof value['fallbackActive'] === 'boolean')
+    // A member without a policy keeps the legacy shape: both fields stay absent.
+    && isOptionalNonBlankString(value['toolPolicy'])
+    && (value['toolFilter'] === undefined || isMemberToolFilter(value['toolFilter']))
     && isFiniteNumber(value['joinedAt'])
     && (value['status'] === 'idle' || value['status'] === 'working' || value['status'] === 'removed')
 }
@@ -791,7 +838,9 @@ function coerceTeamState(value: unknown, expectedId: string): TeamState | undefi
     // Tolerate legacy dirty records instead of bricking the whole team on
     // reload: blank optional fields written by older builds (or by models that
     // materialize optionals as "") are normalized to omitted, matching the
-    // profileSeedId handling below and the tool-input normalization.
+    // profileSeedId handling below and the tool-input normalization. The same
+    // pass drops out-of-contract numeric sentinels such as `line: -1`
+    // (issue #188), so an already-written bad record self-heals on read.
     const cleaned = normalizeBlankOptionalTaskFields(task)
     if (cleaned['profileSeedId'] !== undefined && (typeof cleaned['profileSeedId'] !== 'string' || cleaned['profileSeedId'].trim() === '')) {
       const next = { ...cleaned }
@@ -804,6 +853,173 @@ function coerceTeamState(value: unknown, expectedId: string): TeamState | undefi
   return isTeamState(coerced, expectedId) ? coerced : undefined
 }
 
+/**
+ * Name the first durable defect in a record `coerceTeamState` rejected. Before
+ * this, a rejected `team.json` surfaced only as
+ * `invalid AgentTeams state in team "x"` — no task, no field, no value — while
+ * every AgentTeams tool (read *and* write) failed at once, leaving an operator
+ * to bisect the file by hand (issue #188). The detail is computed only on the
+ * failure path, so the happy path keeps its existing cost.
+ * @param raw - the parsed record as read from disk, before coercion.
+ * @param expectedId - the team id the record was read for.
+ * @returns a `task "t2": findings[0].line -1 must be ...` style detail.
+ */
+export function describeTeamStateDefect(raw: unknown, expectedId: string): string {
+  if (!isRecord(raw)) return 'record must be a JSON object'
+  if (!Array.isArray(raw['tasks'])) {
+    return raw['tasks'] === undefined ? 'tasks is missing' : `tasks must be an array (got ${typeof raw['tasks']})`
+  }
+  const tasks = (raw['tasks'] as unknown[]).map((task) => isRecord(task) ? normalizeBlankOptionalTaskFields(task) : task)
+  for (const [index, task] of tasks.entries()) {
+    if (!isRecord(task)) return `tasks[${index}] must be an object`
+    const label = typeof task['id'] === 'string' && task['id'] !== '' ? `task "${task['id'] as string}"` : `tasks[${index}]`
+    const detail = describeTaskDefect(task)
+    if (detail === undefined) continue
+    return `${label}: ${detail}`
+  }
+  const ids = tasks.filter(isRecord).map((task) => task['id'])
+  if (ids.some((id) => typeof id !== 'string' || id === '')) return 'a task id must be a non-empty string'
+  const seen = new Set<string>()
+  for (const id of ids as string[]) {
+    if (seen.has(id)) return `task "${id}": duplicated task id`
+    seen.add(id)
+  }
+  if (raw['id'] !== expectedId) return `id ${JSON.stringify(raw['id'])} must equal "${expectedId}"`
+  if (typeof raw['name'] !== 'string' || raw['name'].trim() === '') return 'name must be a non-empty string'
+  if (!isOptionalString(raw['description'])) return 'description must be a string'
+  if (raw['profile'] !== undefined && !isTeamProfileSnapshot(raw['profile'])) return 'profile is not a valid profile snapshot'
+  if (typeof raw['captainSessionId'] !== 'string' || raw['captainSessionId'] === '') return 'captainSessionId must be a non-empty string'
+  if (!isFiniteNumber(raw['createdAt'])) return 'createdAt must be a finite number'
+  if (!Array.isArray(raw['members'])) return 'members must be an array'
+  const memberKeys = new Set<string>()
+  const memberIds = new Set<string>()
+  for (const [index, member] of (raw['members'] as unknown[]).entries()) {
+    if (!isTeamMember(member)) return `members[${index}] is not a valid member record`
+    const key = sanitizeKey(member.name)
+    if (key === CAPTAIN_KEY) return `members[${index}]: name "${member.name}" is reserved for the captain`
+    if (memberKeys.has(key)) return `members[${index}]: name "${member.name}" is already used by another member`
+    memberKeys.add(key)
+    if (member.id === '') continue
+    if (memberIds.has(member.id)) return `members[${index}]: id "${member.id}" is duplicated`
+    memberIds.add(member.id)
+  }
+  if (!Number.isSafeInteger(raw['taskSeq']) || (raw['taskSeq'] as number) < 0) return 'taskSeq must be an integer >= 0'
+  if (raw['phase'] !== undefined && raw['phase'] !== 'staged' && raw['phase'] !== 'running') {
+    return `phase ${JSON.stringify(raw['phase'])} must be "staged" or "running"`
+  }
+  if (raw['planReviewState'] !== undefined
+    && raw['planReviewState'] !== 'awaiting_review'
+    && raw['planReviewState'] !== 'awaiting_feedback') {
+    return `planReviewState ${JSON.stringify(raw['planReviewState'])} is invalid`
+  }
+  for (const key of ['approvedAt', 'haltedAt'] as const) {
+    if (raw[key] !== undefined && !isFiniteNumber(raw[key])) return `${key} must be a finite number`
+  }
+  if (raw['halted'] !== undefined && typeof raw['halted'] !== 'boolean') return 'halted must be a boolean'
+  if (raw['reviewPolicy'] !== undefined && !isReviewPolicy(raw['reviewPolicy'])) return 'reviewPolicy is invalid'
+  if (raw['escalated'] !== undefined && typeof raw['escalated'] !== 'boolean') return 'escalated must be a boolean'
+  return 'record does not satisfy the durable team contract'
+}
+
+/** The first task-contract violation, or `undefined` when the task is valid. */
+function describeTaskDefect(task: Record<string, unknown>): string | undefined {
+  if (typeof task['id'] !== 'string') return 'id must be a string'
+  if (!isOptionalString(task['profileSeedId'])) return 'profileSeedId must be a string'
+  if (typeof task['profileSeedId'] === 'string' && task['profileSeedId'].trim() === '') return 'profileSeedId must not be blank'
+  if (typeof task['subject'] !== 'string') return 'subject must be a string'
+  if (!isOptionalString(task['description'])) return 'description must be a string'
+  const statuses = ['pending', 'claimed', 'in_progress', 'completed', 'failed', 'cancelled']
+  if (!statuses.includes(task['status'] as string)) return `status ${JSON.stringify(task['status'])} is invalid`
+  if (!isOptionalString(task['assignee'])) return 'assignee must be a string'
+  if (!Array.isArray(task['dependencies'])) return 'dependencies must be an array'
+  if (!(task['dependencies'] as unknown[]).every((dependency) => typeof dependency === 'string')) return 'dependencies must contain only strings'
+  if (!isOptionalString(task['output'])) return 'output must be a string'
+  if (task['attempt'] !== undefined && !(Number.isSafeInteger(task['attempt']) && (task['attempt'] as number) >= 0)) {
+    return `attempt ${JSON.stringify(task['attempt'])} must be an integer >= 0`
+  }
+  if (!isOptionalString(task['attemptId'])) return 'attemptId must be a string'
+  if (!isOptionalString(task['handoffId'])) return 'handoffId must be a string'
+  if (!isOptionalString(task['handoffFromMemberId'])) return 'handoffFromMemberId must be a string'
+  if (task['reassigning'] !== undefined && typeof task['reassigning'] !== 'boolean') return 'reassigning must be a boolean'
+  if (!isFiniteNumber(task['createdAt'])) return 'createdAt must be a finite number'
+  if (!isFiniteNumber(task['updatedAt'])) return 'updatedAt must be a finite number'
+  return describeQualityTaskDefect(task)
+}
+
+/** Mirror of `hasValidQualityTaskFields`, reporting the first failing field. */
+function describeQualityTaskDefect(task: Record<string, unknown>): string | undefined {
+  if (task['kind'] !== undefined && !(TASK_KINDS as readonly string[]).includes(task['kind'] as string)) {
+    return `kind ${JSON.stringify(task['kind'])} is invalid`
+  }
+  if (task['verdict'] !== undefined && !(REVIEW_VERDICTS as readonly string[]).includes(task['verdict'] as string)) {
+    return `verdict ${JSON.stringify(task['verdict'])} is invalid`
+  }
+  if (task['round'] !== undefined && !(Number.isSafeInteger(task['round']) && (task['round'] as number) >= 1)) {
+    return `round ${JSON.stringify(task['round'])} must be an integer >= 1`
+  }
+  for (const key of ['objective', 'reviewedTaskId', 'sourceTaskId'] as const) {
+    if (task[key] !== undefined && !nonemptyString(task[key])) return `${key} must be a non-empty string`
+  }
+  if (task['reviewedAttempt'] !== undefined
+    && !(Number.isSafeInteger(task['reviewedAttempt']) && (task['reviewedAttempt'] as number) >= 0)) {
+    return `reviewedAttempt ${JSON.stringify(task['reviewedAttempt'])} must be an integer >= 0`
+  }
+  const stringLists = ['inScope', 'outOfScope', 'acceptance', 'verify', 'deliverables', 'nonGoals', 'changedPaths', 'sourceFindingIds', 'coverageOf'] as const
+  for (const key of stringLists) {
+    const value = task[key]
+    if (value === undefined) continue
+    if (!Array.isArray(value)) return `${key} must be an array`
+    const badIndex = (value as unknown[]).findIndex((item) => !nonemptyString(item))
+    if (badIndex >= 0) return `${key}[${badIndex}] must be a non-empty string`
+  }
+  if (task['findings'] !== undefined) {
+    const findings = task['findings']
+    if (!Array.isArray(findings)) return 'findings must be an array'
+    for (const [index, finding] of (findings as unknown[]).entries()) {
+      const detail = describeFindingDefect(finding)
+      if (detail !== undefined) return `findings[${index}].${detail}`
+    }
+    const ids = (findings as ReviewFinding[]).map((finding) => finding.id)
+    if (new Set(ids).size !== ids.length) return 'findings ids must be unique'
+  }
+  if (task['acceptanceResults'] !== undefined) {
+    const results = task['acceptanceResults']
+    if (!Array.isArray(results)) return 'acceptanceResults must be an array'
+    for (const [index, result] of (results as unknown[]).entries()) {
+      if (!isRecord(result)) return `acceptanceResults[${index}] must be an object`
+      if (!nonemptyString(result['criterion'])) return `acceptanceResults[${index}].criterion must be a non-empty string`
+      if (result['status'] !== 'passed' && result['status'] !== 'failed') return `acceptanceResults[${index}].status must be "passed" or "failed"`
+      if (result['evidence'] !== undefined && typeof result['evidence'] !== 'string') return `acceptanceResults[${index}].evidence must be a string`
+    }
+  }
+  if (task['commandsRun'] !== undefined) {
+    const commands = task['commandsRun']
+    if (!Array.isArray(commands)) return 'commandsRun must be an array'
+    for (const [index, command] of (commands as unknown[]).entries()) {
+      if (!isRecord(command)) return `commandsRun[${index}] must be an object`
+      if (!nonemptyString(command['command'])) return `commandsRun[${index}].command must be a non-empty string`
+      if (command['status'] !== 'passed' && command['status'] !== 'failed') return `commandsRun[${index}].status must be "passed" or "failed"`
+    }
+  }
+  return undefined
+}
+
+/** The first finding-contract violation, or `undefined` when the finding is valid. */
+function describeFindingDefect(finding: unknown): string | undefined {
+  if (!isRecord(finding)) return 'must be an object'
+  if (!nonemptyString(finding['id'])) return 'id must be a non-empty string'
+  if (!(FINDING_SEVERITIES as readonly string[]).includes(finding['severity'] as string)) {
+    return `severity ${JSON.stringify(finding['severity'])} is invalid`
+  }
+  if (!nonemptyString(finding['problem'])) return 'problem must be a non-empty string'
+  if (!nonemptyString(finding['requiredFix'])) return 'requiredFix must be a non-empty string'
+  if (finding['file'] !== undefined && !nonemptyString(finding['file'])) return 'file must be a non-empty string'
+  if (finding['line'] !== undefined && !isValidFindingLine(finding['line'])) {
+    return `line ${JSON.stringify(finding['line'])} must be an integer >= 0 (omit it when there is no line number)`
+  }
+  if (finding['resolved'] !== undefined && typeof finding['resolved'] !== 'boolean') return 'resolved must be a boolean'
+  return undefined
+}
 export function isTeamTask(value: unknown): value is TeamTask {
   if (!isRecord(value)) return false
   return typeof value['id'] === 'string'

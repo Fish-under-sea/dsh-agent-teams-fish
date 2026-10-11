@@ -10,6 +10,8 @@
  */
 import type { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
+import { type MemberToolPolicy } from './tool-policies.ts';
+import type { ArtifactSnapshot } from './types.ts';
 import { type TeamState, type TeamTask } from './types.ts';
 export { steerCaptainReport } from './members.ts';
 /** Resolved plugin config consumed by the tools. */
@@ -20,6 +22,8 @@ export interface ToolsConfig {
     memberProvider: string;
     /** Optional member model override. */
     memberModel?: string;
+    /** Optional member LLM provider, paired with `memberModel` (issue #189). */
+    memberLlmProvider?: string;
     /** Prompt injected into member personas and assignments. */
     executionPrompt?: string;
     /** Plugin fallback route. */
@@ -30,6 +34,8 @@ export interface ToolsConfig {
     maxMembers: number;
     /** Named team profiles from the active DSH profile. */
     profiles: Record<string, import('./profiles.ts').TeamProfileConfig>;
+    /** Owner-declared reusable member tool policies, keyed by policy id (#59). */
+    toolPolicies: Record<string, MemberToolPolicy>;
 }
 /** Browser/UI mutations allowed while a plan is waiting for approval. */
 export type StagedPlanMutation = {
@@ -40,6 +46,8 @@ export type StagedPlanMutation = {
     model: string;
     reasoningEffort?: string | null;
     executionPrompt?: string | null;
+    /** Selected tool-policy id; an empty string clears it back to no policy. */
+    toolPolicy?: string;
 } | {
     action: 'update_task';
     taskId: string;
@@ -86,6 +94,7 @@ export declare function haltTeamWork(input: {
     signal?: AbortSignal;
 }): Promise<{
     teamName: string;
+    captainSessionId: string;
     cancelledTasks: number;
     alreadyHalted: boolean;
 }>;
@@ -101,7 +110,9 @@ export declare function stagedPlanFeedbackContext(teamName: string): string;
  * @param config - resolved tool config.
  */
 export declare function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): AgentTeamsRuntime;
-export declare function applyQualityFollowUp(team: TeamState, closed: TeamTask): {
+export declare function applyQualityFollowUp(team: TeamState, closed: TeamTask, snapshotPaths?: (paths: readonly string[]) => ArtifactSnapshot, pathExists?: (path: string) => boolean): {
     created: TeamTask[];
     escalated: boolean;
+    reason?: string;
+    excludedFindings?: string[];
 };

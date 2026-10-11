@@ -75,6 +75,18 @@
 
 ## 上游插件做什么
 
+<div align="center">
+
+[![AtomGit](https://atomgit.com/NanmiCoder/dsh-agent-teams/star/new_badge.svg)](https://atomgit.com/NanmiCoder/dsh-agent-teams)
+
+</div>
+
+<p align="center">
+  <a href="https://dshfind.com/en/plugins/NanmiCoder/dsh-agent-teams?ref=badge"><img src="https://img.shields.io/badge/recommended%20by-dshfind-FFD700?style=flat-square" alt="Recommended by dshfind"></a>
+  <a href="https://dshfind.com/en/plugins/NanmiCoder/dsh-agent-teams?ref=badge"><img src="https://dshfind.com/api/badge/NanmiCoder/dsh-agent-teams?lang=en" alt="dshfind score"></a>
+  <a href="https://dshfind.com/en/plugins/NanmiCoder/dsh-agent-teams?ref=badge"><img src="https://dshfind.com/api/badge/NanmiCoder/dsh-agent-teams?metric=downloads&lang=en" alt="dshfind downloads"></a>
+</p>
+
 上游把 DSH 的单会话扩展成一支**有编制的团队**：建花名册、排任务 DAG（`dependencies` 表达前置关系）、按依赖调度、质量门（requirements → implementation → verification → review → repair → integration）、成员信箱与右侧「团队协作」面板。
 
 本版**没有动这套协作逻辑**，只补「这支队看起来长什么样」。
@@ -120,7 +132,7 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 
 ```jsonc
 "dependencies": {
-  "dsh-agent-teams-fish": "^0.5.1"
+  "dsh-agent-teams-fish": "^0.6.0"
 }
 ```
 
@@ -150,7 +162,6 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 
 在 `profiles/<profile>/cordis.patch.yml` 里启用插件。厂商素材已经**随包分发**，`artworkDir` 只在你想整套换图时才需要：
 
-```yaml
 - insert:
     - id: agent-teams
       name: 'dsh-agent-teams-fish'
@@ -159,6 +170,15 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
         memberProvider: spawn
         # 可选：一个目录即可整套覆盖随包素材（不配就用包内 17 厂商素材）
         artworkDir: <你的美术目录绝对路径>
+        # 上游 v0.1.23 新增：成员默认模型 / 子代理深度上限 / 成员数上限 / 成员工具策略
+        memberModel: deepseek-v4
+        memberMaxDepth: 0
+        maxMembers: 8
+        toolPolicies:
+          researcher:
+            allow: [read, glob, grep]
+          implementer:
+            deny: [web_search]
 ```
 
 | 配置键 | 说明 | 默认值 |
@@ -166,9 +186,28 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 | `stateDir` | 团队状态目录（相对于会话工作区） | `.agent-teams` |
 | `memberProvider` | 成员子代理的创建方式（`spawn` / `fork`） | `spawn` |
 | `artworkDir` | **可选**：自定义美术素材目录的绝对路径；配了就整套覆盖随包素材（含厂商图） | 无（用包内素材） |
+| `memberModel` | **可选**（上游 v0.1.23 起）：全体成员的默认模型 | 无（用队长当前模型） |
+| `memberMaxDepth` | **可选**（上游 v0.1.23 起）：成员子代理的深度上限 | `0` |
+| `maxMembers` | **可选**（上游 v0.1.23 起）：队伍成员数上限 | `8` |
+| `toolPolicies` | **可选**（上游 v0.1.23 起）：成员工具策略表，按 id 声明可复用的 `allow` / `deny` 列表，成员用 `tool_policy` 选用 | 无 |
 
 > 配置目录**只在启动时读一次**；之后换图不用重启（自定义图片走 `no-store`）。
 > ⚠️ `artworkDir` 是**本机绝对路径**：换机器或换用户名后它不再成立，插件会静默回落到随包素材。[0.3.1](release-notes/v0.3.1.md) 之前包里没有厂商图，这次回落就表现为「整队变回内置鲸鱼头像」；现在包里自带厂商素材，跨机器不需要再配它。
+
+### 成员工具策略（`toolPolicies`，上游 v0.1.23 新增）
+
+`toolPolicies` 是部署方配置：按 id 声明可复用的成员工具策略。成员通过 id **选用** —— `agent_teams_add_member` 的 `tool_policy`、内联 `plan` 的成员行、或 profile 的成员行。队长模型可以选用已声明的策略，但**不能**在运行时提交原始 allow/deny 列表或凭空发明策略。
+
+- `deny`：从该成员的 schema 里隐藏指定全局工具，并拒绝其调用。
+- `allow`：只保留指定全局工具。四个协作工具（`agent_teams_claim_task` / `agent_teams_update_task` / `agent_teams_send_message` / `agent_teams_status`）总会被补进 allow 列表。
+- 队长专属工具永远被拒绝，策略不能重新放开；策略也不能拒绝必需的协作工具。
+- 未知 id、空策略、空列表会在挂载时或成员持久化之前报错。
+- `agent_teams_status` 会显示每个成员选用的策略 id；完整解析后的过滤器写进 `team.json` 供审计，子代理的持久 descriptor 在重启后重新应用。
+- 不带策略创建的队伍与成员保持原有工具集与记录形状。`agent_teams_edit_plan` 传空 `tool_policy` 可清除暂存成员的策略。
+
+这是**模型层面的全局工具可见性与调用策略**，不是 OS 沙箱，也不是授权边界。
+
+`memberProvider` 是子代理运行时后端（`spawn` / `fork`），不是 LLM provider。跨 LLM 厂商路由走 `agent_teams_add_member` 的可选 `provider` + `model` 字段；`memberModel` 只是全体成员的默认模型。与队长同 provider/model 的成员继承队长的 reasoning effort，换了 provider 或 model 则自动用目标模型的默认值。要指定 effort 时传可选的 `reasoning_effort` —— 目标模型支持的 effort id 之一，或 `"default"` 强制用模型自己的默认值。
 
 ## 美术系统
 

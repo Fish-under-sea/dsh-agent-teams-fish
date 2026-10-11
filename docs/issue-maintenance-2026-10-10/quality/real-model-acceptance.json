@@ -1,0 +1,185 @@
+{
+  "schema": 1,
+  "generatedFrom": "raw evidence under /private/tmp/agentteams-issues-20261010/quality (kept out of the repo; large logs stay there)",
+  "sanitized": "no credentials, tokens, API keys or account identifiers are included; no command output beyond the plugin/model lines quoted",
+  "environment": {
+    "host": "@deepseek-ai/dsh@0.2.0-rc.2 (repo devDependencies)",
+    "hostClosure": "node_modules/.pnpm @deepseek-ai listing is byte-identical between this worktree and the supervisor worktree (289 entries)",
+    "node": "v26.7.0",
+    "pnpm": "10.33.0",
+    "modelRoute": "deepseek-account / deepseek-flash / reasoningEffort=max, existing account login, no API key configured or read",
+    "profiles": "isolated DSH_HOME profiles (one per side); only credentials.path points at the existing credential store read-only; llm-pi-ai and llm-deepseek disabled",
+    "observer": "own profile extension, observation-only: logs llm/stream provider+model and throws on any route other than deepseek-account/deepseek-flash; it never fabricates a model response, tool result or team state",
+    "baselinePlugin": "git archive 1e1c624fd2e909008aa5228a004706b3e4460670 -> lib/ (its committed build, no artifacts.js)",
+    "candidatePlugin": "this branch worktree, lib/ built from src (pnpm build)"
+  },
+  "scenarios": {
+    "S-A (#161)": {
+      "input": "same prompt, same provided test/sum.test.js (sha256 a66af1e0a507a8ce4f13f3496b96eb3bc6de4916a927a5870a7e3bde4bd89e2a)",
+      "steps": "team of 2 members, implementation -> review pass, then a real edit of the reviewed lib/sum.js from outside the pipeline",
+      "baseline": {
+        "deliveryLineAfterEdit": "Delivery: ok",
+        "loopLineAfterEdit": "Loop: deliverable — All required work and quality gates passed. The captain may report delivery.",
+        "hashMentions": "0"
+      },
+      "candidate": {
+        "deliveryLineBeforeEdit": "Delivery: ok",
+        "deliveryLineAfterEdit": "Delivery: blocked (t2 (review) verdict covers a revision that no longer exists: lib/sum.js changed (sha256 53f09f70 -> af01ed6d) — re-review the current bytes; do not report this revision as verified)",
+        "loopLineAfterEdit": "Loop: blocked — Delivery is blocked: t2 (review) verdict covers a revision that no longer exists: lib/sum.js changed (sha256 53f09f70 -> af01ed6d) …"
+      },
+      "recordedBinding": "review t2 recorded reviewedAttempt=1, reviewedScope=[lib/sum.js], reviewedArtifacts=[{path:lib/sum.js, present:true, sha256:53f09f70…, size:179, mtimeMs:…}]"
+    },
+    "S-B2 (#175B wiring)": {
+      "input": "same prompt; the verification task declared verify [\"node --test test/contract.test.js\"] while that file is not part of the implementation contract",
+      "baseline": {
+        "tasks": 2,
+        "deliveryLine": "Delivery: blocked (t2 failed without a follow-up repair; completed implementation has no passing review)",
+        "autoFollowUp": "none"
+      },
+      "candidate": {
+        "tasks": 4,
+        "taskListLines": [
+          "t2 [failed] verification attempt 1 verify → verifier (deps: t1)",
+          "t3 [failed] repair r2 fixes t2 attempt 1 repair-round-2 → engineer (deps: t1)",
+          "t4 [pending] verification r2 attempt 0 verification-round-2 → verifier (deps: t3)"
+        ],
+        "autoFollowUp": "repair + re-verification created automatically"
+      }
+    },
+    "S-C2 (#175 closure + #174 stale work order)": {
+      "input": "same prompt; pre-existing test/contract.test.js fails on a real defect in lib/sum.js (a - b); implementation inScope [lib/, test/]; engineer kept busy by a long bench task",
+      "candidate": {
+        "autoFollowUp": "t5 repair (contractSnapshot of lib/sum.js sha256 16336470…, findingSourceTaskIds [t3]) + t6 verification",
+        "realEditWhileRepairPending": "lib/sum.js rewritten from outside (16336470… -> 8a8d304c…)",
+        "statusGateWarning": "Gate warnings (delivery is not blocked, but these recorded verdicts or generated work orders no longer describe the current bytes): - t5 work order was generated before: lib/sum.js changed (sha256 16336470 -> 8a8d304c). Its auto-generated acceptance/inScope describe the workspace as it was then: locate the cited code by content anchor, and amend the contract if the target is gone.",
+        "dispatchPrompt": "Before you edit anything: this auto-generated work order was derived from a workspace that has since changed. - t5 work order was generated before: lib/sum.js changed (sha256 16336470 -> 8a8d304c)",
+        "finalDelivery": "Delivery: ok",
+        "finalLoop": "Loop: deliverable — All required work and quality gates passed. The captain may report delivery.",
+        "falseFollowUpBlockers": 0
+      },
+      "baseline": {
+        "tasks": 4,
+        "finalDelivery": "Delivery: blocked (t3 failed without a follow-up repair; t4 (review) is not completed)",
+        "finalLoop": "Loop: running — Work remains on the shared task list; wait for the scheduler or complete owned tasks.",
+        "escalated": false
+      }
+    },
+    "#183 excluded-path finding": {
+      "input": "same prompt; workspace has a real leak (console.log of the raw secret) in src/secrets/redactor.js plus .env.example; the review objective asks for the exact file in every finding",
+      "baseline": {
+        "reviewFinding": "F1 blocker, file=src/secrets/redactor.js",
+        "generatedRepairInScope": [
+          "src/secrets/redactor.js",
+          "console/stream"
+        ],
+        "repairMemberOutput": "BLOCKED — unsatisfiable repair contract (DSH issue #183) … src/secrets/redactor.js -> classifyChangedPath(...) = out_of_scope",
+        "endState": "t3 failed, t4 pending forever, escalated=None",
+        "mechanicalProof": "classifyChangedPath = out_of_scope; evaluateQualityCompletion = {\"ok\":false,\"error\":\"repair cannot complete: src/secrets/redactor.js is out_of_scope\"}"
+      },
+      "candidate": {
+        "reviewFindings": [
+          "F1 blocker file=src/secrets/redactor.js",
+          "F2 low file=src/secrets/redactor.js"
+        ],
+        "tasksCreated": [
+          "t1 implementation",
+          "t2 review"
+        ],
+        "repairCreated": false,
+        "escalation": "Quality-gate loop escalated after t2 (review verdict=needs_revision). Automatic repair/review stopped. Reason: every finding of t2 cites only default-excluded paths (src/secrets/redactor.js, src/secrets/redactor.js); the completion gate classifies them out_of_scope, so no honest repair contract exists — a human must decide. Findings left for the user (default-excluded paths, not a member’s to edit): F1, F2.",
+        "statusLines": [
+          "[escalated]",
+          "Loop: escalated — Automatic review/repair loop hit its ceiling. … Genuinely unresolved gates: t2 (review); any failed gate not listed here already has a follow-up repair."
+        ],
+        "mechanicalProof": "generator created=[] , escalated=true, reason + excludedFindings [\"F1\"]"
+      }
+    }
+  },
+  "requests": {
+    "candidateTotal": 124,
+    "baselineTotal": 71,
+    "routes": "100% (deepseek-account, deepseek-flash) across all runs; the observer throws on any other route"
+  },
+  "panelUI": {
+    "instance": "own isolated candidate instance (127.0.0.1:3093), Ego Lite TaskSpace 13 page p3, session \"S-A content-bound delivery (candidate)\"",
+    "dom": "2 elements with data-verdict-stale=\"true\" (assignment chip t2, DAG node t2 · review-round-1)",
+    "visual": "DAG node border-style dashed with the warning color (contrast: t1 impl keeps its solid border)",
+    "tooltip": "t2 · review-round-1 · review · r1 · pass · ⚠ t2 (review) verdict covers a revision that no longer exists: lib/sum.js changed (sha256 53f09f70 -> af01ed6d) — re-review the current bytes; do not report this revision as verified · deepseek-account/deepseek-flash",
+    "screenshot": "docs/issue-maintenance-2026-10-10/quality/panel-stale-verdict.png",
+    "screenshotSha256": "f53d102443f15d51a4c1d7f18c537596f753b531c937f08be0257db0a6ceb83b",
+    "note": "the supervisor 3081 GUI was not used; this is this branch own instance"
+  },
+  "repoRegression": {
+    "verifyChain": "pnpm verify:quality-gates runs quality-gates-tdd.mjs + repair-scope + amend + content-bound + work-order + repair-wiring + excluded-scope + cross-binding",
+    "verifyQualityGates": "68 tests pass / 0 fail (17 pre-existing + 51 new)",
+    "pnpmTypecheck": "exit 0",
+    "pnpmVerify": "exit 0",
+    "pnpmBuild": "exit 0",
+    "pnpmInstallFrozenLockfile": "exit 0",
+    "baselineRedProof": "the four new case files were run against the unmodified build first: 161 6 fail, 174 4 fail, 175 5 fail, 183 4 fail (exit 1 each); plus a pre-fix proof for the three independent-review fixes run against git archive 1d0048c lib (161 2 fail, 174 symlink case 1 fail)"
+  },
+  "artifacts": {
+    "promptFiles": {
+      "S-A": "8c1277dd556cbd007b83a9ffbe46cf0af4883ebe1814c9a54de9c673ed3aaad0",
+      "S-B2": "a70cbbd9c957efcee4473f85a43d76ad21e595bb29e090844ad7d561a2ea7445",
+      "S-C2": "eb4d0346d1395e88fdce594b158060434443721da9b0cc80eb578320a02e0081",
+      "#183": "485ccf99fd4ffc14c595749ae65cd332e0a51491f444bd98e66117d8371a8c46"
+    },
+    "tapCandidate": {
+      "161": "019e718b173de2828ba4e23cebf1f26b19c8a97fb0af6a02fcff5cd376926645",
+      "174": "071617711cfa5683d49c181a1c292bd4c4db9cf9ab4ec0799da79b637f445b99",
+      "175": "1750c940ca5af753a78bc5ff06a9f1d5effe687558b8471e93cfe4331ebe43f1",
+      "183": "a26df48121f11b0855d83b5a2dbe38b36aaaadb887fbff7492076fc46953e9e0"
+    },
+    "tapBaseline": {
+      "161": "47fe529423f432bc278f904828cf67841f36d4b5d2a26c745231ee49f07feed6",
+      "174": "7e412bba6b104c0fd4fc334efa4fed4069598ed578766f17535ff28f0f328321",
+      "175": "32786d8a49e4c8d1e37460f55e0b97ddb4d4c66550cc15bf102881064b8162e9",
+      "183": "826356921d449eb83c865fabdeb3177fe94bf22ff0ef0327f4b4eb34247a2f8d"
+    },
+    "i183ContractProof": "d04c0439444d5bc73021bd8075f61723980afd1b871f4133210294d470d62a17",
+    "verifyQualityGatesLog": "13662f7be89d6c73398ab87bf2f64fb58ab6fa8e45d8c7e75f79e5672ef69afc",
+    "finalVerifyLog": "1368550ef013d271c2cf0a9826b88dc40a415c60049db0f90a30ed434157090f",
+    "crossRedTap": "7bce6446d9ba927c020ed2096ceff69eab7d379f793cbd74f2768dc55de62df4",
+    "crossGreenTap": "64fd826c43cbdcd5c0f4fcb605b0e294135081e31e9c2d2c92f15e87bdb56154"
+  },
+  "limits": [
+    "no real-model run where the finding points only at .env.example",
+    "a failed repair still leaves its re-check permanently pending (pre-existing loop semantics, unchanged)",
+    "pre-fix records without digests rely on mtime / missing-file heuristics",
+    "mtime comparison has a 1 ms tolerance; hard links are indistinguishable from regular files"
+  ],
+  "libReconciliation": {
+    "gitArtifactStamp": {
+      "schema": 1,
+      "source": "8594dd3671b4a057d94973244c849f16bfcde22cc795f604c247d6ece8a4f969",
+      "output": "b3d6790b24e710874d60d0aec7857dc1e2f02a3dd923a8a48a8da3b388b2ccf7"
+    },
+    "libBuildHashes": {
+      "lib/quality-gates.js": "63430af82ee25f981ac2d4429ffe3a9f112f7537089b96981e33bdb7a88a688e",
+      "lib/artifacts.js": "b54a0a548b3512a07dbfae3ec5f8a989bbb3b108ce313fb1b393f1c82df7fd8a",
+      "lib/workspace-audit.js": "0ee95370791fd2a9dcd98eae6dcda76b37cb30b743cf63be093212cffd021d16",
+      "lib/tools.js": "f95f5c25a86190b8fdd20fee8cf6940cb398fa21fa66a9ad8442e45c4e2b0211",
+      "lib/client.js": "5bdeff44402d67f6e6837c4a1f6a066cc05d39b970d09298b46de581b18b0d88"
+    }
+  },
+  "crossGroupFinding": {
+    "foundBy": "supervisor integration, reproduced from this session saved S-BC candidate team.json",
+    "shape": "t1 changedPaths [lib/format.js]; t5 repair changedPaths [lib/sum.js]; t6 verification reviewedScope [lib/sum.js]; t4 review dependencies [t6] but reviewedTaskId t1 and reviewedScope [lib/format.js]",
+    "impact": "after the loop closed, a later real edit of lib/sum.js produced only a verification warning, so Delivery stayed ok with no valid review evidence for the current bytes",
+    "fix1": "verdictScopePatterns walks the judged lineage (dependencies + reviewed/source links) and binds every implementation/repair changedPaths in it, falling back to their inScope patterns",
+    "fix2": "a drifted verification is a blocker unless a later content-bound sound verdict covers every drifted path (supersession branch), so repair + new review still converges",
+    "caseFile": "scripts/quality-gates-cross-binding.test.mjs (4 real-filesystem cases, wired into verify:quality-gates)",
+    "redProof": {
+      "against": "lib/ of f7c8358",
+      "result": "pass 1 / fail 3",
+      "messages": [
+        "the review scope lost a judged artifact: [\"lib/format.js\"]",
+        "a changed gate input was still delivered: {\"ok\":true,\"blockers\":[],\"warnings\":[t6 verification … lib/sum.js changed …]}",
+        "a drifted verification was demoted to a warning: {\"ok\":true,…}"
+      ]
+    },
+    "greenProof": "4 pass / 0 fail; tap evidence/candidate4-161x175.tap"
+  },
+  "sourceCommitUnderTest": "884d0a0b9f1519bed03b0ed027ffc464a0297a8f"
+}

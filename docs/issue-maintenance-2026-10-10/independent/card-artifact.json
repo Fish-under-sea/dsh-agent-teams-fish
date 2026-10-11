@@ -1,0 +1,21 @@
+{
+  "artifactSha256": "64c886db66bdaef7b73f63791cc83f8ddac7ff1e2f044317c2cf4243950c2797",
+  "sourceCommit": "2e0b1238021fc334f654dd778fac07618849c48f",
+  "files": {
+    "lib/tools.js": {
+      "packedSha256": "04b0f824110cdf6848055e628960fac25bfe9f9ec25821701691b7b511670bb8",
+      "committedSha256": "04b0f824110cdf6848055e628960fac25bfe9f9ec25821701691b7b511670bb8",
+      "matches": true
+    },
+    "lib/client.js": {
+      "packedSha256": "b9e89aae9c195e33bf3da1dbeda43977a5a60511d2ffb34fcde176c0b12399c8",
+      "committedSha256": "b9e89aae9c195e33bf3da1dbeda43977a5a60511d2ffb34fcde176c0b12399c8",
+      "matches": true
+    },
+    "lib/client/agent-teams-card-definition.js": {
+      "packedSha256": "e68961bfcbcbd9fec1dfc6382053d7e10437948cda47b7117685569801616aa9",
+      "committedSha256": "e68961bfcbcbd9fec1dfc6382053d7e10437948cda47b7117685569801616aa9",
+      "matches": true
+    }
+  }
+}

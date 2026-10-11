@@ -1,0 +1,18 @@
+{
+  "capturedAt": "2026-10-10T15:58:26.533Z",
+  "spaceId": 13,
+  "page": "p3",
+  "title": "S-A content-bound delivery (candidate) — DeepSeek Harness",
+  "stale": [
+    {
+      "text": "t2",
+      "title": "t2 · review-round-1 · review · r1 · pass · ⚠ t2 (review) verdict covers a revision that no longer exists: lib/sum.js changed (sha256 53f09f70 -> af01ed6d) — re-review the current bytes; do not report this revision as verified · deepseek-account/deepseek-flash",
+      "borderStyle": "none"
+    },
+    {
+      "text": "t2reviewerreview-round-1",
+      "title": "t2 · review-round-1 · review · r1 · pass · ⚠ t2 (review) verdict covers a revision that no longer exists: lib/sum.js changed (sha256 53f09f70 -> af01ed6d) — re-review the current bytes; do not report this revision as verified · deepseek-account/deepseek-flash",
+      "borderStyle": "dashed"
+    }
+  ]
+}

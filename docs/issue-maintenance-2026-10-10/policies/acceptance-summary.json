@@ -1,0 +1,89 @@
+{
+  "issue": 59,
+  "key": "policies",
+  "date": "2026-10-10",
+  "repository": "NanmiCoder/dsh-agent-teams",
+  "baseCommit": "1e1c624fd2e909008aa5228a004706b3e4460670",
+  "summary": "Owner-declared per-member tool policies: a member selects a policy by id; the resolved effective filter hides the named global tools from the child's schemas, rejects their invocation, is persisted in team.json, and is reapplied by the continuable descriptor after a real host restart.",
+  "host": {
+    "cli": "official dsh launcher (node_modules/.bin/dsh), real Harness Loader, isolated DSH_HOME under /private/tmp",
+    "packages": {
+      "@deepseek-ai/dsh": "0.2.0-rc.2",
+      "@deepseek-ai/dsh-subagent": "0.2.0-rc.2",
+      "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
+      "@deepseek-ai/dsh-agent": "0.2.0-rc.2",
+      "@deepseek-ai/dsh-llm": "0.2.0-rc.2"
+    },
+    "model": "deepseek-account / deepseek-flash / reasoningEffort max (existing account login; no API key configured, read, or written)",
+    "observations": [
+      "llm/stream: the exact tool schemas the provider received per session",
+      "tools/execute + tools/result: real executions and settled outcomes",
+      "ctx.tools.execute: real forced dispatch on behalf of one live member agent",
+      "team.json + real files on disk"
+    ]
+  },
+  "cases": [
+    {
+      "id": "same-case-baseline",
+      "hostLib": "unmodified committed artifacts",
+      "session": "session-0ee121ad-04fe-4791-bb46-f30c24a2e097",
+      "members": {
+        "researcher": { "requestTools": 30, "hasWrite": true, "hasBash": true, "forcedWrite": "succeeded, file written", "forcedBash": "succeeded, file written" },
+        "implementer": { "requestTools": 30, "hasWrite": true, "hasBash": true, "forcedWrite": "succeeded, file written" }
+      }
+    },
+    {
+      "id": "same-case-candidate",
+      "hostLib": "rebuilt lib from the fix",
+      "session": "session-b7238690-b734-4cd1-b81b-6cf8d299e61b",
+      "members": {
+        "researcher": { "toolPolicy": "researcher", "requestTools": 8, "hasWrite": false, "hasBash": false, "coordinationTools": 4, "forcedWrite": "UNKNOWN_TOOL, no file", "forcedBash": "UNKNOWN_TOOL, no file" },
+        "implementer": { "toolPolicy": null, "requestTools": 30, "hasWrite": true, "hasBash": true, "forcedWrite": "succeeded, file written" }
+      },
+      "persistedFilter": { "allow": ["read", "glob", "grep", "agent_teams_claim_task", "agent_teams_update_task", "agent_teams_send_message", "agent_teams_status"], "deny": "10 captain-only agent_teams_* tools" }
+    },
+    {
+      "id": "cold-restart",
+      "what": "second host process, same DSH_HOME and workspace, durable session reattached, members cold-resumed from their descriptors by a real captain message",
+      "result": "tool lists and forced-dispatch verdicts identical to the pre-restart phase; team.json policy id and filter unchanged"
+    },
+    {
+      "id": "profile-path",
+      "session": "session-172e1038-5a31-4b6d-b36a-34c9bbf6ccfd",
+      "result": {
+        "prof-researcher (tool_policy=researcher)": "8 tools, forced write UNKNOWN_TOOL, forced read executed",
+        "prof-implementer (tool_policy=deny-web)": "28 tools (30 - web_search - web_fetch), write/bash usable, real artifact written"
+      }
+    },
+    {
+      "id": "add-member-tool-path",
+      "session": "session-4929002a-6374-431f-a656-107512bfa8b7",
+      "result": {
+        "late-researcher (tool_policy=researcher, running team)": "8 tools, forced write UNKNOWN_TOOL",
+        "base-worker (no policy)": "30 tools, real artifact written"
+      }
+    },
+    {
+      "id": "invalid-policy-paths",
+      "session": "session-2fd2a751-bfc5-4260-8807-82989e2dc515",
+      "result": {
+        "unknownPolicyId": "real tool error `unknown tool policy \"does-not-exist\" (configured: broken, deny-web, researcher)`; no member record persisted (also reproduced through a direct ctx.tools.execute dispatch)",
+        "invalidOwnerToolName": "member persisted with tool_policy=broken, child start rejected with the host message `tools.restrict() names unknown global tool \"definitely_not_a_tool\"`, member id stayed empty, zero model requests, no child agent and no resumable orphan; the no-policy member of the same team finished real work"
+      }
+    }
+  ],
+  "checks": {
+    "typecheck": "exit 0",
+    "build + git-artifact verify": "exit 0",
+    "unit/pure tests": "scripts/tool-policies.test.mjs 13/13",
+    "related repo suites": "harness-compat-tdd, member-spawn-recovery, corrupt-teamjson, capabilities, fallback-tdd, member-failure-tdd, verify.mjs, quality-gates (+repair-scope/amend), lifecycle-verify, stress-verify, issue-159 - all exit 0",
+    "pack": "npm pack produced nanmicoder-dsh-agent-teams-0.1.22.tgz; every packaged lib file hash equals the repository lib file hash"
+  },
+  "limits": [
+    "no UI policy editor; the Web plan editor does not send tool_policy",
+    "agent_teams_edit_plan update_member.tool_policy is covered by source and unit tests only",
+    "an owner policy tool name the host does not register cannot be rejected before the member record is written (the host registry view available to the plugin does not cover the agent-plane tools); the child start fails loud instead, leaving the member unspawned with the host message and no orphan session",
+    "tool visibility/invocation policy only - not an OS sandbox or an authorization boundary",
+    "no full pnpm verify matrix (multi-harness contract runs, git-install, source-runner)"
+  ]
+}

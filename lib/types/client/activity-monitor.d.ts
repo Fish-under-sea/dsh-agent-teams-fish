@@ -30,6 +30,12 @@ export interface ActivityTask {
     readonly kind?: string;
     readonly round?: number;
     readonly verdict?: string;
+    /**
+     * Server-side audit of this task's verdict against the current bytes. Set
+     * when the recorded pass (or its generated work order) no longer describes
+     * the workspace, so the panel cannot render a bare green verdict.
+     */
+    readonly verdictStale?: string;
     /** Durable last-write stamp; drives the finished-member ordering (issue #192). */
     readonly updatedAt?: number;
 }

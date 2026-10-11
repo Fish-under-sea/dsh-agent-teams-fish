@@ -10,6 +10,9 @@ import {
   TASK_KINDS,
   TERMINAL_TASK_STATUSES,
   type AcceptanceResult,
+  type ArtifactDigest,
+  type ArtifactScopeGap,
+  type ArtifactSnapshot,
   type CommandResult,
   type FindingSeverity,
   type ReviewFinding,
@@ -96,6 +99,7 @@ export interface PlannedFollowUpTask {
   id?: string
   kind: TaskKind
   subject?: string
+  description?: string
   assignee?: string
   dependencies?: string[]
   round?: number
@@ -106,7 +110,13 @@ export interface PlannedFollowUpTask {
   verify?: string[]
   sourceTaskId?: string
   sourceFindingIds?: string[]
+  findingSourceTaskIds?: string[]
   reviewedTaskId?: string
+  /**
+   * Paths whose current bytes the generated contract was derived from. The
+   * caller snapshots them so the work order can later be marked stale.
+   */
+  contractPaths?: string[]
 }
 
 export interface PlanQualityFollowUpResult {
@@ -114,6 +124,10 @@ export interface PlanQualityFollowUpResult {
   tasks: PlannedFollowUpTask[]
   escalated?: boolean
   status?: 'escalated'
+  /** Why the automatic loop stopped; surfaced to the captain. */
+  reason?: string
+  /** Findings that were refused as contract material (default-excluded paths). */
+  excludedFindings?: string[]
 }
 
 export interface CoverageRow {
@@ -126,6 +140,40 @@ export interface CoverageRow {
 export interface DeliveryResult {
   ok: boolean
   blockers: string[]
+  /**
+   * Non-blocking observations: gates that legitimately drifted because a later
+   * revision superseded them, and generated work orders whose cited files
+   * moved on. Delivery is still allowed, but never silently.
+   */
+  warnings: string[]
+}
+
+/**
+ * Current workspace bytes handed to the delivery check. The rules stay pure:
+ * the caller (which owns the workspace path) reads the digests and passes them
+ * in. Omit it when no workspace is available — the attempt-level staleness
+ * checks still run, and content checks simply cannot be made.
+ */
+export interface ScopeEntry {
+  path: string
+  present: boolean
+}
+
+export interface DeliveryAudit {
+  /** Current bytes of the paths recorded by verdicts and work orders. */
+  artifacts?: readonly ArtifactDigest[]
+  /**
+   * Current contents of the scope patterns recorded verdicts bound. A path that
+   * appears here but not in the verdict's recorded artifacts was never
+   * reviewed, so a broad scope cannot silently absorb it.
+   */
+  expandedScope?: readonly ScopeEntry[]
+  /**
+   * Parts of the *current* read that could not be completed (expansion cap,
+   * unreadable directory or file, illegal pattern). A non-empty list means the
+   * audit itself is incomplete, so no verdict may be confirmed from it.
+   */
+  gaps?: readonly ArtifactScopeGap[]
 }
 
 export interface ResumeTeamResult {
@@ -143,6 +191,8 @@ export interface QualityLoopSnapshot {
   escalated: boolean
   deliverable: boolean
   summary: string
+  /** Non-blocking gate observations (stale verdicts and work orders). */
+  warnings: string[]
 }
 
 export interface QualityGraphDraft {
@@ -240,16 +290,26 @@ export function pathMatchesScope(path: string, pattern: string): boolean {
   return normalizedPath === normalizedPattern
 }
 
-function isDefaultExcluded(path: string): boolean {
+/**
+ * Paths no quality contract may claim: version control, harness/plugin state,
+ * secrets and private keys. Exported because the completion gate and contract
+ * generation (including the artifact reader that must not walk into
+ * `.agent-teams/`, `secrets/` or `.env*`) have to share exactly one predicate.
+ */
+export function isDefaultExcludedPath(path: string): boolean {
   const normalized = normalizeWorkspacePath(path)
   if (normalized === undefined) return false
   const segments = normalized.split('/')
   const base = segments[segments.length - 1] ?? ''
-  if (segments[0] === '.git' || segments[0] === '.dsh') return true
+  if (segments[0] === '.git' || segments[0] === '.dsh' || segments[0] === '.agent-teams') return true
   if (base === '.env' || base.startsWith('.env.')) return true
   if (segments.includes('secrets')) return true
   if (base.startsWith('id_rsa')) return true
   return false
+}
+
+function isDefaultExcluded(path: string): boolean {
+  return isDefaultExcludedPath(path)
 }
 
 export function classifyChangedPath(
@@ -575,29 +635,78 @@ const REPAIR_SCOPE_LINE_SUFFIX = /:\d+$/
  * forbids, so no honest completion exists and the repair dead-locks.
  *
  * Absolute and otherwise illegal paths are dropped (they can never match
- * workspace-relative scope patterns anyway); when nothing legal remains,
- * the source task's own inScope is kept as the fallback. Over-inclusion is
- * accepted: inScope is an audit upper bound, and the requiredFix text still
- * tells the implementer what to touch.
+ * workspace-relative scope patterns anyway), and so are paths the completion
+ * gate refuses by default (`secrets/` segments, `.env*`, `.git`, `.dsh`,
+ * `id_rsa*` — issue #183). `classifyChangedPath` checks that default-exclusion
+ * set BEFORE inScope, so collecting such a path here would generate a contract
+ * that demands an edit the gate calls `out_of_scope`: no honest completion
+ * exists and the repair burns its rounds. Contract generation and the
+ * completion gate must agree; the exemption channel stays the user-configured
+ * outOfScope list, never a reviewer's finding.
  *
- * Keep all derived paths until the generator resolves inherited exclusions;
- * filtering first would silently discard a required fix target.
+ * When nothing legal remains, the source task's own inScope is kept as the
+ * fallback. Over-inclusion is accepted otherwise: inScope is an audit upper
+ * bound, and the requiredFix text still tells the implementer what to touch.
+ * Keep every remaining derived path until the generator resolves inherited
+ * exclusions; filtering those first would silently discard a required fix
+ * target.
  */
 export function repairScopeFromFindings(
   findings: readonly ReviewFinding[],
   fallback: string[] | undefined,
 ): string[] | undefined {
   const derived: string[] = []
-  const push = (raw: string): void => {
-    const normalized = normalizeWorkspacePath(raw.replace(REPAIR_SCOPE_LINE_SUFFIX, ''))
-    if (normalized === undefined || derived.includes(normalized)) return
-    derived.push(normalized)
-  }
   for (const finding of findings) {
-    if (nonemptyString(finding.file)) push(finding.file)
-    for (const match of finding.requiredFix.matchAll(REPAIR_SCOPE_PATH_PATTERN)) push(match[0])
+    for (const path of findingDerivedPaths(finding)) {
+      if (isDefaultExcludedPath(path) || derived.includes(path)) continue
+      derived.push(path)
+    }
   }
   return derived.length > 0 ? derived : fallback === undefined ? undefined : [...new Set(fallback)]
+}
+
+/**
+ * Every workspace-relative path one finding names, before any exclusion rule:
+ * the observed file plus the fix targets referenced by `requiredFix`.
+ */
+export function findingDerivedPaths(finding: ReviewFinding): string[] {
+  const paths: string[] = []
+  const push = (raw: string): void => {
+    const normalized = normalizeWorkspacePath(raw.replace(REPAIR_SCOPE_LINE_SUFFIX, ''))
+    if (normalized === undefined || paths.includes(normalized)) return
+    paths.push(normalized)
+  }
+  if (nonemptyString(finding.file)) push(finding.file)
+  for (const match of finding.requiredFix.matchAll(REPAIR_SCOPE_PATH_PATTERN)) push(match[0])
+  return paths
+}
+
+/**
+ * Findings whose every cited path is default-excluded. They cannot become an
+ * honest repair contract (see {@link repairScopeFromFindings}), so they are
+ * surfaced to the captain instead of silently disappearing or dead-locking a
+ * member. A finding that names no path at all is NOT excluded: it simply falls
+ * back to the judged task's own scope, exactly as before.
+ */
+export function excludedFindingsOf(
+  findings: readonly ReviewFinding[],
+  pathExists?: (path: string) => boolean,
+): ReviewFinding[] {
+  return findings.filter((finding) => {
+    const paths = findingDerivedPaths(finding)
+    if (paths.length === 0) return false
+    const own = normalizeWorkspacePath(finding.file ?? '')
+    return paths.every((path) => {
+      if (isDefaultExcludedPath(path)) return true
+      // A path extracted from prose that does not exist is not something the
+      // workspace can act on (real run: "console/stream write" became a
+      // repair scope while the finding's actual target was excluded). The
+      // finding's own `file` always counts, so "create this new file" stays
+      // actionable.
+      if (pathExists === undefined || path === own) return false
+      return !pathExists(path)
+    })
+  })
 }
 
 /** Captain-only amendment payload: replacement values for contract fields. */
@@ -757,18 +866,90 @@ function withoutScopeConflicts(
   return outOfScope.filter((pattern) => !conflicting.has(pattern))
 }
 
-export function planQualityFollowUp(team: TeamState, closed: TeamTask): PlanQualityFollowUpResult {
+/**
+ * Line anchors (`file.ts:42`, `deliver.go:503-505`) cannot survive an edit
+ * anywhere above them, so generated text never asserts one. Callers locate the
+ * cited code by content anchor instead. Fully anchored numbers (`12:30`, a
+ * version, a URL port) are left alone.
+ */
+const LINE_ANCHOR_PATTERN = /(?<!\/\/)(?<=[A-Za-z_./\\-][A-Za-z0-9_./\\-]*):\d+(?:-\d+)?\b/gu
+
+/** Remove drifting line anchors from generated contract text. */
+export function stripLineAnchors(text: string): string {
+  return text.replaceAll(LINE_ANCHOR_PATTERN, '')
+}
+
+/**
+ * Acceptance items derived from a failed verification: the concrete failures
+ * the member must resolve. A verification carries no review findings, so the
+ * generator uses the evidence the task itself recorded.
+ */
+function verificationFailureAcceptance(closed: TeamTask): string[] {
+  const items: string[] = []
+  for (const result of closed.acceptanceResults ?? []) {
+    if (result.status === 'failed') items.push(`Satisfy the failed acceptance item recorded by ${closed.id}: ${stripLineAnchors(result.criterion)}`)
+  }
+  for (const command of closed.commandsRun ?? []) {
+    if (command.status !== 'failed') continue
+    items.push(`Make \`${command.command}\` pass (it failed${command.exitCode === undefined ? '' : ` with exit code ${command.exitCode}`})`)
+  }
+  if (items.length === 0) {
+    items.push(`Resolve what failed in ${closed.id}${closed.output === undefined ? '' : `: ${closed.output.slice(0, 200)}`}`)
+  }
+  return items
+}
+
+/**
+ * What the generator tells the member about a work order it derived from
+ * someone else's findings. The plugin cannot verify a finding's claims (a
+ * target count, a symbol that still exists, an action the product supports),
+ * and says so instead of lending them authority.
+ */
+function generatedRepairDescription(
+  closed: TeamTask,
+  excluded: readonly ReviewFinding[],
+): string {
+  const lines = [
+    `Auto-generated repair round derived from the findings of ${closed.id} (${taskKindOf(closed)}).`,
+    'The plugin did not verify the finding text: line numbers were removed because an edit anywhere above them invalidates them, and claims such as a target count, a symbol that still exists, or an action the product supports are the reporter\'s, not confirmed facts. Locate the cited code by content anchor (symbol, string, call site) and check every acceptance item against the current workspace before editing; if an item is already satisfied or impossible as written, report that instead of forcing a change.',
+  ]
+  if (excluded.length > 0) {
+    lines.push(`Excluded from this contract on purpose: ${excluded.map((finding) => finding.file ?? finding.id).join(', ')} — the completion gate refuses those paths by default, so they need a human decision rather than a member edit.`)
+  }
+  return lines.join(' ')
+}
+
+export interface PlanQualityFollowUpOptions {
+  /**
+   * Whether a derived path exists in the workspace. Used only to classify a
+   * finding as excluded-only; without it every derived path counts.
+   */
+  pathExists?: (path: string) => boolean
+}
+
+export function planQualityFollowUp(
+  team: TeamState,
+  closed: TeamTask,
+  options: PlanQualityFollowUpOptions = {},
+): PlanQualityFollowUpResult {
   const empty = { created: [] as PlannedFollowUpTask[], tasks: [] as PlannedFollowUpTask[] }
+  const escalate = (reason: string): PlanQualityFollowUpResult => ({ ...empty, escalated: true, status: 'escalated', reason })
   const kind = taskKindOf(closed)
-  if ((kind !== 'review' && kind !== 'requirements') || closed.status !== 'failed') return empty
-  if (closed.verdict === 'reject') return { ...empty, escalated: true, status: 'escalated' }
-  if (closed.verdict !== 'needs_revision') return empty
+  if (closed.status !== 'failed') return empty
+  if (kind === 'review' || kind === 'requirements') {
+    if (closed.verdict === 'reject') return escalate(`${closed.id} returned verdict=reject; automatic repair is not a substitute for a human decision`)
+    if (closed.verdict !== 'needs_revision') return empty
+  } else if (kind !== 'verification') {
+    // Both quality gates share the findings → repair → re-check contract, so
+    // a failed verification self-heals exactly like a failed review (#175B).
+    return empty
+  }
 
   const policy = resolveReviewPolicy(team.reviewPolicy)
   const currentRound = closed.round ?? 1
   const nextRound = currentRound + 1
   const maxRounds = kind === 'requirements' ? policy.requirementsMaxRounds : policy.codeMaxRounds
-  if (nextRound > maxRounds) return { ...empty, escalated: true, status: 'escalated' }
+  if (nextRound > maxRounds) return escalate(`${closed.id} reached the ${kind} round ceiling (${maxRounds}); the loop cannot open round ${nextRound}`)
 
   if (kind === 'requirements') {
     const next: PlannedFollowUpTask = {
@@ -783,52 +964,89 @@ export function planQualityFollowUp(team: TeamState, closed: TeamTask): PlanQual
     return { created: [next], tasks: [next] }
   }
 
-  const sourceId = closed.reviewedTaskId ?? closed.sourceTaskId
+  const target = reviewedTargetOf(team, closed)
+  const sourceId = closed.reviewedTaskId ?? closed.sourceTaskId ?? target?.id
   if (sourceId === undefined) return empty
   const source = team.tasks.find((item) => item.id === sourceId)
   const findings = unresolvedFindings(closed)
-  const findingIds = findings.map((finding) => finding.id)
+  const excluded = excludedFindingsOf(findings, options.pathExists)
+  const actionable = findings.filter((finding) => !excluded.includes(finding))
+  if (findings.length > 0 && actionable.length === 0) {
+    return {
+      ...empty,
+      escalated: true,
+      status: 'escalated',
+      reason: `every finding of ${closed.id} cites only default-excluded paths (${excluded.map((finding) => finding.file ?? finding.id).join(', ')}); the completion gate classifies those out_of_scope, so no honest repair contract exists — a human must decide`,
+      excludedFindings: excluded.map((finding) => finding.id),
+    }
+  }
+  const findingIds = actionable.map((finding) => finding.id)
   if (hasOpenFollowUp(team, sourceId, findingIds)) return empty
   if (countRepairAttempts(team, sourceId, findingIds) >= policy.maxRepairAttempts) {
-    return { ...empty, escalated: true, status: 'escalated' }
+    return escalate(`${sourceId} already used ${policy.maxRepairAttempts} automatic repair attempts for these findings`)
   }
-  // inScope is derived from the findings below: the observed file plus any
-  // workspace-relative paths referenced by the requiredFix instructions.
 
-  const repairScope = repairScopeFromFindings(findings, source?.inScope)
+  // inScope is derived from the actionable findings below: the observed file
+  // plus any workspace-relative paths referenced by the requiredFix
+  // instructions, minus everything the completion gate refuses by default.
+  const repairScope = repairScopeFromFindings(actionable, source?.inScope)
+  const verifyCommands = source?.verify ?? closed.verify
   const implementer = schedulableAssignee(source?.assignee, team)
+  // The causal edge to the failed gate is recorded explicitly: it cannot be a
+  // `dependencies` entry, because a failed task never reaches `completed` and
+  // `unsatisfiedDependencies` would then make this repair unclaimable forever.
+  const repairDependencies = [sourceId]
   const repair: PlannedFollowUpTask = {
     id: `repair-round-${nextRound}`,
     kind: 'repair',
     subject: `repair-round-${nextRound}`,
+    description: generatedRepairDescription(closed, excluded),
     assignee: implementer,
-    dependencies: [sourceId],
+    dependencies: repairDependencies,
     round: nextRound,
     objective: source?.objective ?? closed.objective ?? `Fix findings from ${sourceId}`,
     inScope: repairScope,
     outOfScope: withoutScopeConflicts(source?.outOfScope, repairScope),
-    verify: source?.verify,
-    acceptance: findings.map((finding) => finding.requiredFix),
+    verify: verifyCommands,
+    acceptance: actionable.length > 0
+      ? actionable.map((finding) => stripLineAnchors(finding.requiredFix))
+      : verificationFailureAcceptance(closed),
     sourceTaskId: sourceId,
     sourceFindingIds: findingIds,
+    findingSourceTaskIds: [closed.id],
+    contractPaths: repairScope,
   }
-  const reviewer = schedulableAssignee(
+  const checker = schedulableAssignee(
     closed.assignee !== implementer ? closed.assignee : undefined,
     team,
     implementer,
   )
-  const review: PlannedFollowUpTask = {
-    id: `review-round-${nextRound}`,
-    kind: 'review',
-    subject: `review-round-${nextRound}`,
-    assignee: reviewer,
-    dependencies: [repair.id ?? `repair-round-${nextRound}`],
-    round: nextRound,
-    objective: sanitizeReviewObjective(closed.objective, DEFAULT_REVIEW_OBJECTIVE),
-    acceptance: sanitizeReviewAcceptance(closed.acceptance),
-    reviewedTaskId: repair.id,
-  }
-  return { created: [repair, review], tasks: [repair, review] }
+  const recheck: PlannedFollowUpTask = kind === 'verification'
+    ? {
+      id: `verification-round-${nextRound}`,
+      kind: 'verification',
+      subject: `verification-round-${nextRound}`,
+      assignee: checker,
+      dependencies: [repair.id ?? `repair-round-${nextRound}`],
+      round: nextRound,
+      objective: closed.objective ?? `Re-verify ${sourceId} after ${repair.id ?? `repair-round-${nextRound}`}`,
+      acceptance: sanitizeReviewAcceptance(closed.acceptance),
+      verify: verifyCommands,
+    }
+    : {
+      id: `review-round-${nextRound}`,
+      kind: 'review',
+      subject: `review-round-${nextRound}`,
+      assignee: checker,
+      dependencies: [repair.id ?? `repair-round-${nextRound}`],
+      round: nextRound,
+      objective: sanitizeReviewObjective(closed.objective, DEFAULT_REVIEW_OBJECTIVE),
+      acceptance: sanitizeReviewAcceptance(closed.acceptance),
+      reviewedTaskId: repair.id,
+    }
+  const result: PlanQualityFollowUpResult = { created: [repair, recheck], tasks: [repair, recheck] }
+  if (excluded.length > 0) result.excludedFindings = excluded.map((finding) => finding.id)
+  return result
 }
 
 export function buildCoverageMatrix(goalItems: readonly string[], tasks: readonly TeamTask[]): CoverageRow[] {
@@ -846,8 +1064,566 @@ export function buildCoverageMatrix(goalItems: readonly string[], tasks: readonl
   })
 }
 
-export function canDeclareDelivery(team: TeamState): DeliveryResult {
+/* ------------------------------------------------------------------------ *
+ * Content-bound verdicts (issue #161) and generated work orders (issue #174) *
+ * ------------------------------------------------------------------------ */
+
+const VERDICT_KINDS: readonly TaskKind[] = ['review', 'requirements', 'verification']
+
+/** Kinds whose completion is a verdict about a revision. */
+export function isVerdictKind(kind: TaskKind | undefined): boolean {
+  return kind !== undefined && (VERDICT_KINDS as readonly string[]).includes(kind)
+}
+
+function shortDigest(value: string | undefined): string {
+  return value === undefined || value === '' ? 'absent' : value.slice(0, 8)
+}
+
+/**
+ * Compare recorded bytes against the bytes on disk now. Every returned entry
+ * is a reason a verdict or a work order no longer describes the workspace.
+ * "Cannot be read" is reported as its own reason: a permission error is not a
+ * match, and a partial read is not proof of an unchanged file.
+ */
+/** One reason an artifact set no longer describes the workspace. */
+export interface ArtifactDriftDetail {
+  /** The implicated path, when the reason is about one concrete file. */
+  path?: string
+  message: string
+}
+
+/**
+ * Compare recorded bytes against the bytes on disk now, keeping the path each
+ * reason belongs to. "Cannot be read" is reported as its own reason: a
+ * permission error is not a match, and a partial read is not proof of an
+ * unchanged file.
+ */
+export function artifactDriftDetails(
+  recorded: readonly ArtifactDigest[] | undefined,
+  current: readonly ArtifactDigest[] | undefined,
+): ArtifactDriftDetail[] {
+  if (recorded === undefined || recorded.length === 0 || current === undefined) return []
+  const now = new Map(current.map((item) => [item.path, item]))
+  const drift: ArtifactDriftDetail[] = []
+  for (const before of recorded) {
+    const after = now.get(before.path)
+    if (after === undefined) {
+      drift.push({ path: before.path, message: `${before.path} was not in the current workspace snapshot` })
+      continue
+    }
+    if (after.unreadable === true) {
+      drift.push({ path: after.path, message: `${after.path} cannot be read now (${after.reason ?? 'unknown error'}), so its recorded bytes cannot be confirmed` })
+      continue
+    }
+    if (before.unreadable === true) {
+      drift.push({ path: before.path, message: `${before.path} was not readable when this evidence was recorded (${before.reason ?? 'unknown error'}), so it never covered those bytes` })
+      continue
+    }
+    if (before.present !== after.present) {
+      drift.push({
+        path: before.path,
+        message: after.present
+          ? `${before.path} was absent when recorded and now exists`
+          : `${before.path} was deleted after it was recorded`,
+      })
+      continue
+    }
+    if (before.present && after.present && before.sha256 !== after.sha256) {
+      drift.push({ path: before.path, message: `${before.path} changed (sha256 ${shortDigest(before.sha256)} -> ${shortDigest(after.sha256)})` })
+    }
+  }
+  return drift
+}
+
+/** Message-only view of {@link artifactDriftDetails}. */
+export function artifactDrift(
+  recorded: readonly ArtifactDigest[] | undefined,
+  current: readonly ArtifactDigest[] | undefined,
+): string[] {
+  return artifactDriftDetails(recorded, current).map((detail) => detail.message)
+}
+
+/** A partially enumerated scope is incomplete evidence, never a silent pass. */
+export function gapDrift(gaps: readonly ArtifactScopeGap[] | undefined): string[] {
+  return (gaps ?? []).map((gap) => `${gap.pattern}: ${gap.reason}`)
+}
+
+/**
+ * The task a verdict is about: an explicit `reviewedTaskId`/`sourceTaskId`
+ * first, otherwise the implementation/repair this gate depends on.
+ */
+export function reviewedTargetOf(team: TeamState, task: TeamTask): TeamTask | undefined {
+  const explicit = task.reviewedTaskId ?? task.sourceTaskId
+  if (explicit !== undefined) {
+    const found = team.tasks.find((item) => item.id === explicit)
+    if (found !== undefined) return found
+  }
+  for (const dependency of task.dependencies) {
+    const candidate = team.tasks.find((item) => item.id === dependency)
+    if (candidate !== undefined && (taskKindOf(candidate) === 'implementation' || taskKindOf(candidate) === 'repair')) {
+      return candidate
+    }
+  }
+  return undefined
+}
+
+/**
+ * Bind a closing verdict to the revision it judged: the target's execution
+ * generation plus the bytes of the paths it changed. Without this a `pass` is
+ * only a task record, and delivery cannot tell that the reviewed bytes were
+ * edited or deleted afterwards. `gaps` carries the parts of the reviewed scope
+ * that could not be enumerated, `scope` the patterns it bound, and
+ * `duringDrift` any change observed between claim and close — partial or
+ * moving coverage is never read as complete.
+ */
+export interface ReviewBinding {
+  artifacts: readonly ArtifactDigest[]
+  gaps?: readonly ArtifactScopeGap[]
+  scope?: readonly string[]
+  duringDrift?: readonly string[]
+}
+
+export function bindReviewToRevision(team: TeamState, task: TeamTask, binding: ReviewBinding): TeamTask {
+  const target = reviewedTargetOf(team, task)
+  if (target === undefined || binding.artifacts.length === 0) return task
+  const kind = taskKindOf(task)
+  return {
+    ...task,
+    ...kind === 'review' || kind === 'requirements' ? { reviewedTaskId: task.reviewedTaskId ?? target.id } : {},
+    reviewedAttempt: target.attempt ?? 0,
+    reviewedArtifacts: binding.artifacts.map((item) => ({ ...item })),
+    ...binding.gaps === undefined || binding.gaps.length === 0 ? {} : { reviewedGaps: binding.gaps.map((gap) => ({ ...gap })) },
+    ...binding.scope === undefined || binding.scope.length === 0 ? {} : { reviewedScope: [...binding.scope] },
+    ...binding.duringDrift === undefined || binding.duringDrift.length === 0 ? {} : { reviewedDuringDrift: [...binding.duringDrift] },
+  }
+}
+
+/**
+ * Scope a verdict must bind: the paths the judged task changed, otherwise the
+ * scope patterns of its contract (expanded by the caller).
+ */
+export function verdictScopePatterns(team: TeamState, task: TeamTask): string[] {
+  const lineage = verdictLineageTasks(team, task)
+  // Every implementation/repair this gate transitively judges: the original
+  // source AND the repairs that followed it. A pre-planned review whose edge
+  // was rewired to a re-verification must still bind the bytes the original
+  // source changed, otherwise a later edit to the repair's target would have
+  // no valid review evidence at all (#161 x #175).
+  const changed = new Set<string>()
+  for (const item of lineage) {
+    const kind = taskKindOf(item)
+    if (kind !== 'implementation' && kind !== 'repair') continue
+    for (const path of item.changedPaths ?? []) {
+      const normalized = normalizeWorkspacePath(path)
+      if (normalized !== undefined) changed.add(normalized)
+    }
+  }
+  if (changed.size > 0) return [...changed]
+  const scope = new Set<string>([
+    ...(task.inScope ?? []),
+    ...lineage.flatMap((item) => item.inScope ?? []),
+  ])
+  if (scope.size > 0) return [...scope]
+  return (reviewedTargetOf(team, task)?.deliverables ?? [])
+    .map((path) => normalizeWorkspacePath(path))
+    .filter((path): path is string => path !== undefined)
+}
+
+/**
+ * The artifacts a gate transitively judges: follow explicit review/source
+ * links and dependency edges (a repair records the source it fixes, a
+ * verification depends on the repair, a review depends on the verification).
+ */
+function verdictLineageTasks(team: TeamState, task: TeamTask): TeamTask[] {
+  const byId = new Map(team.tasks.map((item) => [item.id, item]))
+  const visited = new Set<string>()
+  const queue = [...task.dependencies]
+  const explicit = task.reviewedTaskId ?? task.sourceTaskId
+  if (explicit !== undefined) queue.push(explicit)
+  const target = reviewedTargetOf(team, task)
+  if (target !== undefined && target.id !== task.id) queue.push(target.id)
+  const found: TeamTask[] = []
+  while (queue.length > 0) {
+    const id = queue.shift() as string
+    if (visited.has(id)) continue
+    visited.add(id)
+    const item = byId.get(id)
+    if (item === undefined) continue
+    found.push(item)
+    queue.push(...item.dependencies)
+    const link = item.reviewedTaskId ?? item.sourceTaskId
+    if (link !== undefined) queue.push(link)
+  }
+  return found
+}
+
+/** Scope patterns recorded verdicts bound, for new-file detection. */
+export function deliveryScopePatterns(team: TeamState): string[] {
+  const patterns = new Set<string>()
+  for (const task of team.tasks) {
+    const kind = taskKindOf(task)
+    if (!(VERDICT_KINDS as readonly string[]).includes(kind) || task.status !== 'completed') continue
+    for (const pattern of task.reviewedScope ?? []) patterns.add(pattern)
+  }
+  return [...patterns]
+}
+
+function isDirectoryPattern(pattern: string): boolean {
+  const trimmed = pattern.trim()
+  return trimmed.endsWith('/') || trimmed === '.' || trimmed === './'
+}
+
+/** Root of the artifact lineage a gate judges (the implementation/repair chain). */
+function lineageRoot(team: TeamState, task: TeamTask): string | undefined {
+  let current = task
+  const visited = new Set<string>()
+  while (!visited.has(current.id)) {
+    visited.add(current.id)
+    const nextId = current.reviewedTaskId ?? current.sourceTaskId ?? current.dependencies[0]
+    const next = nextId === undefined ? undefined : team.tasks.find((item) => item.id === nextId)
+    if (next === undefined) break
+    current = next
+  }
+  if (current.id === task.id) {
+    const kind = taskKindOf(task)
+    return kind === 'implementation' || kind === 'repair' ? task.id : undefined
+  }
+  return current.id
+}
+
+const VERDICT_WEIGHT: Readonly<Record<string, number>> = { verification: 1, review: 2, requirements: 2 }
+
+/**
+ * Does `candidate` cover `prior`'s evidence? A later sound verdict that either
+ * depends on the prior gate or judges the same artifact lineage supersedes it,
+ * so a legitimately changed revision does not block delivery forever behind an
+ * old snapshot.
+ */
+function supersedes(team: TeamState, candidate: TeamTask, prior: TeamTask): boolean {
+  if (candidate.id === prior.id || candidate.status !== 'completed') return false
+  if ((VERDICT_WEIGHT[taskKindOf(candidate)] ?? 0) < (VERDICT_WEIGHT[taskKindOf(prior)] ?? 0)) return false
+  if (candidate.createdAt < prior.createdAt) return false
+  if (candidate.createdAt === prior.createdAt && (candidate.round ?? 0) <= (prior.round ?? 0)) return false
+  if (dependencyClosureContains(team.tasks, candidate.dependencies, prior.id)) return true
+  const candidateRoot = lineageRoot(team, candidate)
+  return candidateRoot !== undefined && candidateRoot === lineageRoot(team, prior)
+}
+
+/** Paths whose current bytes decide whether recorded verdicts and orders hold. */
+export function deliveryArtifactPaths(team: TeamState): string[] {
+  const paths = new Set<string>()
+  for (const task of team.tasks) {
+    for (const artifact of task.reviewedArtifacts ?? []) paths.add(artifact.path)
+    for (const artifact of task.contractSnapshot?.artifacts ?? []) paths.add(artifact.path)
+  }
+  // Legacy verdicts carry no digests; the changed paths of the task they
+  // judged still let the delivery check detect a later edit by mtime.
+  for (const task of team.tasks) {
+    const kind = taskKindOf(task)
+    if (!(VERDICT_KINDS as readonly string[]).includes(kind)) continue
+    if (task.status !== 'completed') continue
+    if ((task.reviewedArtifacts?.length ?? 0) > 0) continue
+    for (const changed of reviewedTargetOf(team, task)?.changedPaths ?? []) {
+      const normalized = normalizeWorkspacePath(changed)
+      if (normalized !== undefined) paths.add(normalized)
+    }
+  }
+  return [...paths]
+}
+
+/**
+ * File mtimes carry sub-millisecond precision while task stamps are whole
+ * milliseconds, so a file written in the same millisecond as the verdict would
+ * otherwise read as "modified after". Only a clearly later write counts;
+ * content digests are exact and need no tolerance.
+ */
+const MTIME_TOLERANCE_MS = 1
+
+function verdictDrift(team: TeamState, item: TeamTask, audit: DeliveryAudit): ArtifactDriftDetail[] {
+  const issues: ArtifactDriftDetail[] = []
+  const target = reviewedTargetOf(team, item)
+  if (target !== undefined && item.reviewedAttempt !== undefined && (target.attempt ?? 0) !== item.reviewedAttempt) {
+    issues.push({ message: `${target.id} was re-attempted after this verdict (attempt ${item.reviewedAttempt} -> ${target.attempt ?? 0})` })
+  }
+  for (const gap of gapDrift(item.reviewedGaps)) issues.push({ message: gap })
+  for (const drift of item.reviewedDuringDrift ?? []) {
+    issues.push({ message: `the workspace changed while this verdict was being formed (${drift}), so it does not bind a stable revision` })
+  }
+  const recorded = item.reviewedArtifacts
+  // A file that appeared under a bound directory scope after the verdict was
+  // never reviewed: a broad scope must not quietly absorb new work.
+  const recordedPaths = new Set((recorded ?? []).map((artifact) => artifact.path))
+  for (const pattern of item.reviewedScope ?? []) {
+    if (!isDirectoryPattern(pattern)) continue
+    for (const entry of audit.expandedScope ?? []) {
+      if (entry.present !== true || recordedPaths.has(entry.path)) continue
+      if (!pathMatchesScope(entry.path, pattern)) continue
+      issues.push({ path: entry.path, message: `${entry.path} appeared under the reviewed scope ${pattern} after the verdict and was never reviewed` })
+    }
+  }
+  if (recorded !== undefined && recorded.length > 0) {
+    issues.push(...artifactDriftDetails(recorded, audit.artifacts))
+    return issues
+  }
+  // A record written before content-bound verdicts existed carries no digests,
+  // but the revision it judged is still identifiable: the bytes the target
+  // claimed to change cannot have been written after the verdict closed.
+  for (const changed of target?.changedPaths ?? []) {
+    const normalized = normalizeWorkspacePath(changed)
+    if (normalized === undefined) continue
+    const current = audit.artifacts?.find((artifact) => artifact.path === normalized)
+    if (current === undefined) continue
+    if (current.unreadable === true) {
+      issues.push({ path: normalized, message: `${normalized} cannot be read now (${current.reason ?? 'unknown error'}), so the verdict cannot be confirmed` })
+      continue
+    }
+    if (current.present === true && current.mtimeMs !== undefined && current.mtimeMs > item.updatedAt + MTIME_TOLERANCE_MS) {
+      issues.push({ path: normalized, message: `${normalized} was modified after this verdict closed (file mtime is later than the verdict)` })
+      continue
+    }
+    if (current.present !== true) {
+      // No digest was recorded, so the plugin cannot date the disappearance:
+      // the file the implementation changed is gone and the verdict cannot be
+      // confirmed against it. A later sound verdict supersedes this one.
+      issues.push({ path: normalized, message: `${normalized} is recorded as changed by ${target?.id ?? 'the judged task'} but no longer exists, and no digest was recorded to confirm the verdict` })
+    }
+  }
+  return issues
+}
+
+/** A verdict whose evidence is absent altogether cannot be audited at all. */
+function unboundVerdict(item: TeamTask): boolean {
+  return (item.reviewedArtifacts?.length ?? 0) === 0
+    && (item.reviewedGaps?.length ?? 0) === 0
+    && item.reviewedAttempt === undefined
+}
+
+/**
+ * Every completed verdict that claims to cover the current revision but no
+ * longer does.
+ *
+ * A drifted review/requirements pass is the delivery evidence itself, so it
+ * blocks — unless a later sound verdict covers the same lineage, which is the
+ * normal shape of `pass → repair → new pass` and must converge instead of
+ * blocking forever behind an old snapshot. A drifted `verification` is only a
+ * warning: a later repair legitimately supersedes it, but never silently.
+ * A verdict that predates content binding is reported as an unauditable gap
+ * rather than being read as a pass over the current bytes.
+ */
+/** One audited verdict observation, attributed to the task that carries it. */
+export interface VerdictAuditNote {
+  taskId: string
+  /**
+   * `blocker` when this pass is the delivery evidence itself, `warning` when a
+   * later sound verdict supersedes it or when it is an intermediate gate.
+   */
+  level: 'blocker' | 'warning'
+  message: string
+}
+
+/**
+ * Audit every completed verdict against the current revision (issue #161).
+ *
+ * A drifted review/requirements pass is the delivery evidence itself, so it
+ * blocks — unless a later sound verdict covers the same lineage, which is the
+ * normal shape of `pass → repair → new pass` and must converge instead of
+ * blocking forever behind an old snapshot. A drifted `verification` or a
+ * superseded pass is reported as a warning: a later repair legitimately
+ * supersedes it, but never silently. A verdict that predates content binding
+ * is reported as an unauditable gap rather than being read as a pass over the
+ * current bytes.
+ */
+export function verdictAuditNotes(team: TeamState, audit: DeliveryAudit = {}): VerdictAuditNote[] {
+  const notes: VerdictAuditNote[] = []
+  const verdicts = team.tasks.filter((item) => {
+    const kind = taskKindOf(item)
+    if (!(VERDICT_KINDS as readonly string[]).includes(kind)) return false
+    if (item.status !== 'completed') return false
+    return !((kind === 'review' || kind === 'requirements') && item.verdict !== 'pass')
+  })
+  const issues = new Map<string, ArtifactDriftDetail[]>()
+  for (const item of verdicts) {
+    const found = verdictDrift(team, item, audit)
+    if (found.length > 0) issues.set(item.id, found)
+  }
+  // Only a verdict that actually recorded the bytes it judged, over a complete
+  // scope, and that still matches the workspace may supersede an older one. An
+  // unbound (pre-fix) pass records no identity at all: it cannot "bind the
+  // current bytes" and must never clear another verdict's drift.
+  const sound = verdicts.filter((item) => !issues.has(item.id) && bindsRecordedRevision(team, item, audit))
+  for (const item of verdicts) {
+    const kind = taskKindOf(item)
+    const found = issues.get(item.id)
+    if (found === undefined) {
+      if (unboundVerdict(item) && audit.artifacts !== undefined) {
+        notes.push({
+          taskId: item.id,
+          level: 'warning',
+          message: `${item.id} (${kind}) predates content-bound verdicts and recorded no artifact identity; delivery cannot confirm the current bytes are the revision it judged — re-review to bind them`,
+        })
+      }
+      continue
+    }
+    const detail = `${item.id} (${kind}) verdict covers a revision that no longer exists: ${found.map((entry) => entry.message).join('; ')}`
+    // Superseding needs the same lineage AND coverage of every drifted path or
+    // gap: a narrower new review over path A must not clear an unreviewed
+    // change to path B.
+    const covering = sound.find((candidate) => (
+      supersedes(team, candidate, item) && coversDrift(team, candidate, item, found)
+    ))
+    if (covering !== undefined) {
+      notes.push({ taskId: item.id, level: 'warning', message: `${detail} — superseded by ${covering.id}, which binds the current bytes` })
+      continue
+    }
+    // A drifted gate without a sound covering verdict leaves the current bytes
+    // with no valid evidence, whether it is a review or a verification: the
+    // only difference is what the captain has to do next.
+    if (kind === 'verification') {
+      notes.push({ taskId: item.id, level: 'blocker', message: `${detail} — re-verify the current bytes; no later sound verdict bound them` })
+      continue
+    }
+    notes.push({ taskId: item.id, level: 'blocker', message: `${detail} — re-review the current bytes; do not report this revision as verified` })
+  }
+  return notes
+}
+
+/**
+ * Does this verdict hold a real, complete, still-matching record of the bytes
+ * it judged? Attempt drift, an incomplete scope, or a workspace that moved
+ * while the gate was open all disqualify it.
+ */
+function bindsRecordedRevision(team: TeamState, item: TeamTask, audit: DeliveryAudit): boolean {
+  if ((item.reviewedArtifacts?.length ?? 0) === 0) return false
+  if ((item.reviewedGaps?.length ?? 0) > 0) return false
+  if ((item.reviewedDuringDrift?.length ?? 0) > 0) return false
+  const target = reviewedTargetOf(team, item)
+  if (target !== undefined && item.reviewedAttempt !== undefined && (target.attempt ?? 0) !== item.reviewedAttempt) return false
+  if (audit.artifacts === undefined) return false
+  return artifactDriftDetails(item.reviewedArtifacts, audit.artifacts).length === 0
+}
+
+/**
+ * A later verdict clears an older one only when it covers what actually
+ * drifted: every implicated path must be among the bytes it bound. Reasons
+ * that name no path (an incomplete scope, a re-attempted target, a workspace
+ * that moved mid-review) are cleared only by a sound verdict about the same
+ * target's current attempt.
+ */
+function coversDrift(
+  team: TeamState,
+  candidate: TeamTask,
+  prior: TeamTask,
+  drifted: readonly ArtifactDriftDetail[],
+): boolean {
+  if (drifted.length === 0) return false
+  const bound = new Set((candidate.reviewedArtifacts ?? []).map((artifact) => artifact.path))
+  for (const issue of drifted) {
+    if (issue.path !== undefined) {
+      if (!bound.has(issue.path)) return false
+      continue
+    }
+    const candidateTarget = reviewedTargetOf(team, candidate)
+    const priorTarget = reviewedTargetOf(team, prior)
+    if (candidateTarget === undefined || priorTarget === undefined || candidateTarget.id !== priorTarget.id) return false
+    if (candidate.reviewedAttempt !== (candidateTarget.attempt ?? 0)) return false
+    if (lineageRoot(team, candidate) === undefined || lineageRoot(team, candidate) !== lineageRoot(team, prior)) return false
+  }
+  return true
+}
+
+function verdictBindingIssues(team: TeamState, audit: DeliveryAudit): { blockers: string[]; warnings: string[] } {
   const blockers: string[] = []
+  const warnings: string[] = []
+  for (const note of verdictAuditNotes(team, audit)) {
+    if (note.level === 'blocker') blockers.push(note.message)
+    else warnings.push(note.message)
+  }
+  return { blockers, warnings }
+}
+
+/** Staleness of one auto-generated work order against the current workspace. */
+export function contractStaleness(task: TeamTask, current: readonly ArtifactDigest[] | undefined): string[] {
+  const snapshot: ArtifactSnapshot | undefined = task.contractSnapshot
+  if (snapshot === undefined) return []
+  const stale: string[] = []
+  for (const gap of gapDrift(snapshot.gaps)) {
+    stale.push(`${task.id} work order recorded only partial coverage (${gap}), so a change outside it would not be visible`)
+  }
+  if (snapshot.artifacts.length === 0 || current === undefined) return stale
+  stale.push(...artifactDrift(snapshot.artifacts, current).map((item) => `${task.id} work order was generated before: ${item}`))
+  return stale
+}
+
+export interface WorkOrderWarning {
+  taskId: string
+  message: string
+}
+
+/**
+ * Open auto-generated work orders whose cited bytes moved on (issue #174).
+ * A repair round's acceptance/inScope is a snapshot of the workspace at
+ * finding-generation time; every later round invalidates it, and nothing used
+ * to say so — a member following it literally edits the wrong line or redoes
+ * work that is already done.
+ */
+export function workOrderWarnings(team: TeamState, current: readonly ArtifactDigest[] | undefined): WorkOrderWarning[] {
+  if (current === undefined) return []
+  const warnings: WorkOrderWarning[] = []
+  for (const task of team.tasks) {
+    if (task.contractSnapshot === undefined) continue
+    if (!OPEN_FOLLOW_UP_STATUSES.includes(task.status)) continue
+    const stale = contractStaleness(task, current)
+    if (stale.length === 0) continue
+    warnings.push({
+      taskId: task.id,
+      message: `${stale.join('; ')}. Its auto-generated acceptance/inScope describe the workspace as it was then: locate the cited code by content anchor, and amend the contract if the target is gone.`,
+    })
+  }
+  return warnings
+}
+
+/** Statuses in which a repair still counts as the follow-up of a failed gate. */
+const FOLLOW_UP_VISIBLE_STATUSES: readonly TaskStatus[] = ['pending', 'claimed', 'in_progress', 'completed']
+
+/**
+ * Does a repair exist that addresses this failed gate's findings? The causal
+ * link can be recorded three ways, and all of them count: the repair's
+ * declared source, an explicit dependency edge on the failed gate, or the
+ * finding ids the repair was opened for (issue #175A — the transcript edge
+ * used to be invisible to the graph, so delivery reported
+ * `failed without a follow-up repair` for loops that were already closed).
+ */
+function hasFollowUpRepair(team: TeamState, item: TeamTask): boolean {
+  const kind = taskKindOf(item)
+  if (kind === 'requirements') {
+    return team.tasks.some((candidate) => (
+      taskKindOf(candidate) === 'requirements' && (candidate.round ?? 1) > (item.round ?? 1)
+    ))
+  }
+  const findingIds = new Set((item.findings ?? []).map((finding) => finding.id))
+  const upstreams = new Set(
+    [item.id, item.reviewedTaskId ?? item.sourceTaskId].filter((id): id is string => id !== undefined),
+  )
+  return team.tasks.some((candidate) => {
+    if (taskKindOf(candidate) !== 'repair' || !FOLLOW_UP_VISIBLE_STATUSES.includes(candidate.status)) return false
+    if (candidate.sourceTaskId !== undefined && upstreams.has(candidate.sourceTaskId)) return true
+    if (candidate.dependencies.includes(item.id)) return true
+    if (candidate.findingSourceTaskIds?.includes(item.id) === true) return true
+    return candidate.sourceFindingIds !== undefined
+      && candidate.sourceFindingIds.some((findingId) => findingIds.has(findingId))
+  })
+}
+
+/** Failed gates with no follow-up at all: work that genuinely remains. */
+function unresolvedGates(team: TeamState): TeamTask[] {
+  return team.tasks.filter((item) => isQualityKind(taskKindOf(item))
+    && item.status === 'failed'
+    && !hasFollowUpRepair(team, item))
+}
+
+export function canDeclareDelivery(team: TeamState, audit: DeliveryAudit = {}): DeliveryResult {
+  const blockers: string[] = []
+  const warnings: string[] = []
   if (team.phase === 'staged') blockers.push('team plan is awaiting approval')
   if (team.halted === true) blockers.push('team is halted')
   if (team.escalated === true) blockers.push('team requires escalation resolution')
@@ -869,21 +1645,7 @@ export function canDeclareDelivery(team: TeamState): DeliveryResult {
       continue
     }
     if (item.status === 'failed') {
-      const repaired = kind === 'review'
-        ? quality.some((candidate) => (
-          taskKindOf(candidate) === 'repair'
-          && candidate.sourceTaskId === (item.reviewedTaskId ?? item.sourceTaskId)
-          && (candidate.status === 'pending' || candidate.status === 'claimed' || candidate.status === 'in_progress' || candidate.status === 'completed')
-        ))
-        : kind === 'requirements'
-          ? quality.some((candidate) => (
-            taskKindOf(candidate) === 'requirements'
-            && (candidate.round ?? 1) > (item.round ?? 1)
-          ))
-          : quality.some((candidate) => (
-            taskKindOf(candidate) === 'repair' && candidate.sourceTaskId === item.id
-          ))
-      if (!repaired) blockers.push(`${item.id} failed without a follow-up repair`)
+      if (!hasFollowUpRepair(team, item)) blockers.push(`${item.id} failed without a follow-up repair`)
       continue
     }
     if (item.status === 'cancelled') continue
@@ -904,7 +1666,22 @@ export function canDeclareDelivery(team: TeamState): DeliveryResult {
     }
   }
 
-  return { ok: blockers.length === 0, blockers }
+  const binding = verdictBindingIssues(team, audit)
+  blockers.push(...binding.blockers)
+  warnings.push(...binding.warnings)
+  if (audit.artifacts !== undefined) {
+    warnings.push(...workOrderWarnings(team, audit.artifacts).map((warning) => warning.message))
+  }
+  // An incomplete audit is not evidence: a scope that outgrew its cap, or a
+  // path that cannot be read, must block instead of passing as a clean read.
+  const auditGaps = audit.gaps ?? []
+  if (auditGaps.length > 0 && (quality.length > 0 || blockers.length > 0 || audit.artifacts !== undefined)) {
+    const shown = auditGaps.slice(0, 3).map((gap) => `${gap.pattern}: ${gap.reason}`)
+    const more = auditGaps.length > shown.length ? ` (+${auditGaps.length - shown.length} more)` : ''
+    blockers.push(`the current workspace audit is incomplete (${shown.join('; ')}${more}); no recorded verdict can be confirmed over partially enumerated or unreadable artifacts`)
+  }
+
+  return { ok: blockers.length === 0, blockers, warnings }
 }
 
 export function resumeTeamState(team: TeamState, reason: string): ResumeTeamResult {
@@ -925,6 +1702,15 @@ export function resumeTeamState(team: TeamState, reason: string): ResumeTeamResu
   }
 }
 
+/**
+ * The durable `findings[].line` contract, shared by the write-side parser
+ * (`parseFindings`) and the durable validator (`isReviewFinding`) so the two
+ * cannot drift apart again (issue #188, #105 class).
+ */
+export function isValidFindingLine(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0
+}
+
 export function isReviewFinding(value: unknown): value is ReviewFinding {
   if (!isRecord(value)) return false
   return nonemptyString(value['id'])
@@ -932,7 +1718,7 @@ export function isReviewFinding(value: unknown): value is ReviewFinding {
     && nonemptyString(value['problem'])
     && nonemptyString(value['requiredFix'])
     && (value['file'] === undefined || nonemptyString(value['file']))
-    && (value['line'] === undefined || (Number.isSafeInteger(value['line']) && (value['line'] as number) >= 0))
+    && (value['line'] === undefined || isValidFindingLine(value['line']))
     && (value['resolved'] === undefined || typeof value['resolved'] === 'boolean')
 }
 
@@ -960,7 +1746,30 @@ export function isTaskRevision(value: unknown): value is TaskRevision {
     && isRecord(value['previous'])
 }
 
-// Optional fields whose persisted values must be non-empty when present
+export function isArtifactDigest(value: unknown): value is ArtifactDigest {
+  if (!isRecord(value)) return false
+  if (!nonemptyString(value['path']) || normalizeWorkspacePath(value['path'] as string) === undefined) return false
+  if (typeof value['present'] !== 'boolean') return false
+  if (value['sha256'] !== undefined && !(typeof value['sha256'] === 'string' && /^[0-9a-f]{64}$/u.test(value['sha256']))) return false
+  if (value['size'] !== undefined && !(Number.isSafeInteger(value['size']) && (value['size'] as number) >= 0)) return false
+  if (value['mtimeMs'] !== undefined && !(typeof value['mtimeMs'] === 'number' && Number.isFinite(value['mtimeMs']))) return false
+  if (value['unreadable'] !== undefined && typeof value['unreadable'] !== 'boolean') return false
+  if (value['reason'] !== undefined && !nonemptyString(value['reason'])) return false
+  if (value['present'] === true && value['sha256'] === undefined) return false
+  return true
+}
+
+export function isArtifactScopeGap(value: unknown): value is ArtifactScopeGap {
+  return isRecord(value) && nonemptyString(value['pattern']) && nonemptyString(value['reason'])
+}
+
+export function isArtifactSnapshot(value: unknown): value is ArtifactSnapshot {
+  if (!isRecord(value)) return false
+  if (!Number.isSafeInteger(value['at']) || (value['at'] as number) < 0) return false
+  if (!Array.isArray(value['artifacts']) || !value['artifacts'].every(isArtifactDigest)) return false
+  return value['gaps'] === undefined
+    || (Array.isArray(value['gaps']) && value['gaps'].length > 0 && value['gaps'].every(isArtifactScopeGap))
+}// Optional fields whose persisted values must be non-empty when present
 // (mirrors the checks in hasValidQualityTaskFields). Some models materialize
 // optional tool parameters as "" instead of omitting them (e.g. GPT-5.6
 // sending reviewedTaskId:"" or profile:""), which would otherwise be written
@@ -999,7 +1808,60 @@ export function normalizeBlankOptionalTaskFields<T extends object>(task: T): T {
     if (kept.length === 0) delete next[key]
     else next[key] = kept
   }
-  return next as T
+  return normalizeSentinelNumericTaskFields(next) as T
+}
+
+/**
+ * Numeric task fields whose durable contract is a bounded range, paired with
+ * their minimum (`Number.isSafeInteger` plus the lower bound). Some models
+ * materialize "no value" as a numeric sentinel (`line: -1`, `round: 0`,
+ * `reviewedAttempt: -1`) that the write side used to persist verbatim and the
+ * durable validator then rejected — bricking the whole team on the next read
+ * (issue #188, #105 class).
+ */
+const SENTINEL_NUMERIC_TASK_FIELDS = [
+  ['round', 1],
+  ['reviewedAttempt', 0],
+  ['attempt', 0],
+] as const satisfies readonly (readonly [string, number])[]
+
+/**
+ * Treat an out-of-contract **numeric** sentinel as absent, including
+ * `findings[].line` (contract: `isValidFindingLine`).
+ *
+ * Only numbers are healed. A value of any other type (`round: "oops"`,
+ * `attempt: {}`, `line: "12"`) is left exactly as written and stays a hard,
+ * named validation failure, so genuine corruption is never silently swallowed
+ * while `-1`-style sentinels — the #188 brick — self-heal. Field order, unknown
+ * fields and every in-range value are preserved.
+ */
+export function normalizeSentinelNumericTaskFields<T extends object>(task: T): T {
+  const next = { ...task } as Record<string, unknown>
+  let changed = false
+  for (const [key, minimum] of SENTINEL_NUMERIC_TASK_FIELDS) {
+    const value = next[key]
+    if (typeof value !== 'number') continue
+    if (Number.isSafeInteger(value) && value >= minimum) continue
+    delete next[key]
+    changed = true
+  }
+  if (Array.isArray(next['findings'])) {
+    let findingsChanged = false
+    const findings = (next['findings'] as unknown[]).map((finding) => {
+      if (!isRecord(finding)) return finding
+      const line = finding['line']
+      if (typeof line !== 'number' || isValidFindingLine(line)) return finding
+      const cleaned = { ...finding }
+      delete cleaned['line']
+      findingsChanged = true
+      return cleaned
+    })
+    if (findingsChanged) {
+      next['findings'] = findings
+      changed = true
+    }
+  }
+  return (changed ? next : task) as T
 }
 
 export function hasValidQualityTaskFields(value: Record<string, unknown>): boolean {
@@ -1012,7 +1874,7 @@ export function hasValidQualityTaskFields(value: Record<string, unknown>): boole
   if (value['reviewedAttempt'] !== undefined && !(Number.isSafeInteger(value['reviewedAttempt']) && (value['reviewedAttempt'] as number) >= 0)) {
     return false
   }
-  const stringLists = ['inScope', 'outOfScope', 'acceptance', 'verify', 'deliverables', 'nonGoals', 'changedPaths', 'sourceFindingIds', 'coverageOf'] as const
+  const stringLists = ['inScope', 'outOfScope', 'acceptance', 'verify', 'deliverables', 'nonGoals', 'changedPaths', 'sourceFindingIds', 'findingSourceTaskIds', 'coverageOf'] as const
   for (const key of stringLists) {
     if (value[key] === undefined) continue
     if (!Array.isArray(value[key]) || !(value[key] as unknown[]).every(nonemptyString)) return false
@@ -1032,6 +1894,14 @@ export function hasValidQualityTaskFields(value: Record<string, unknown>): boole
   if (value['revisions'] !== undefined) {
     if (!Array.isArray(value['revisions']) || !value['revisions'].every(isTaskRevision)) return false
   }
+  if (value['reviewedArtifacts'] !== undefined
+    && (!Array.isArray(value['reviewedArtifacts']) || !value['reviewedArtifacts'].every(isArtifactDigest))) return false
+  if (value['reviewedGaps'] !== undefined
+    && (!Array.isArray(value['reviewedGaps']) || value['reviewedGaps'].length === 0 || !value['reviewedGaps'].every(isArtifactScopeGap))) return false
+  if (value['reviewedScope'] !== undefined && !nonemptyStringList(value['reviewedScope'])) return false
+  if (value['reviewedDuringDrift'] !== undefined && !nonemptyStringList(value['reviewedDuringDrift'])) return false
+  if (value['contractSnapshot'] !== undefined && !isArtifactSnapshot(value['contractSnapshot'])) return false
+  if (value['verdictStartSnapshot'] !== undefined && !isArtifactSnapshot(value['verdictStartSnapshot'])) return false
   return true
 }
 
@@ -1144,8 +2014,9 @@ export function qualityPlanningPrompt(): string {
   ].join(' ')
 }
 
-export function describeQualityLoop(team: TeamState): QualityLoopSnapshot {
-  const delivery = canDeclareDelivery(team)
+export function describeQualityLoop(team: TeamState, audit: DeliveryAudit = {}): QualityLoopSnapshot {
+  const delivery = canDeclareDelivery(team, audit)
+  const warnings = [...delivery.warnings]
   if (team.halted === true) {
     return {
       state: 'halted',
@@ -1153,6 +2024,7 @@ export function describeQualityLoop(team: TeamState): QualityLoopSnapshot {
       escalated: team.escalated === true,
       deliverable: false,
       summary: 'Team is halted. Call agent_teams_resume with a reason before creating more work.',
+      warnings,
     }
   }
   if (delivery.ok) {
@@ -1161,16 +2033,19 @@ export function describeQualityLoop(team: TeamState): QualityLoopSnapshot {
       halted: false,
       escalated: team.escalated === true,
       deliverable: true,
-      summary: 'All required work and quality gates passed. The captain may report delivery.',
+      summary: `All required work and quality gates passed. The captain may report delivery.${warnings.length === 0 ? '' : ` Warnings: ${warnings.join('; ')}`}`,
+      warnings,
     }
   }
   if (team.escalated === true) {
+    const unresolved = unresolvedGates(team)
     return {
       state: 'escalated',
       halted: false,
       escalated: true,
       deliverable: false,
-      summary: 'Automatic review/repair loop hit its ceiling. The team is still running; do not treat this as halt. Escalate to the user instead of inventing another needs_revision cycle.',
+      summary: `Automatic review/repair loop hit its ceiling. The team is still running; do not treat this as halt. Escalate to the user instead of inventing another needs_revision cycle.${unresolved.length === 0 ? '' : ` Genuinely unresolved gates: ${unresolved.map((item) => `${item.id} (${taskKindOf(item)})`).join(', ')}; any failed gate not listed here already has a follow-up repair.`}`,
+      warnings,
     }
   }
   const open = team.tasks.some((item) => OPEN_STATUSES.includes(item.status))
@@ -1181,7 +2056,8 @@ export function describeQualityLoop(team: TeamState): QualityLoopSnapshot {
     deliverable: false,
     summary: open
       ? 'Work remains on the shared task list; wait for the scheduler or complete owned tasks.'
-      : `Delivery is blocked: ${delivery.blockers.join('; ') || 'unresolved quality gates'}.`,
+      : `Delivery is blocked: ${delivery.blockers.join('; ') || 'unresolved quality gates'}.${warnings.length === 0 ? '' : ` Warnings: ${warnings.join('; ')}`}`,
+    warnings,
   }
 }
 

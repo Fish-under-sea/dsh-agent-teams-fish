@@ -20,7 +20,7 @@ export const PROFILE_PROTOCOL_PROMPT_LIMIT = 240
 
 const PROFILE_KEYS = ['description', 'protocol', 'executionPrompt', 'fallback', 'members', 'tasks', 'taskPlanning', 'reviewPolicy'] as const
 const REVIEW_POLICY_KEYS = ['requirementsMinRounds', 'requirementsMaxRounds', 'codeMaxRounds', 'maxRepairAttempts', 'requiredReviewers'] as const
-const MEMBER_KEYS = ['name', 'role', 'provider', 'model', 'reasoning_effort', 'executionPrompt', 'fallback'] as const
+const MEMBER_KEYS = ['name', 'role', 'provider', 'model', 'reasoning_effort', 'executionPrompt', 'fallback', 'tool_policy'] as const
 const FALLBACK_KEYS = ['provider', 'model'] as const
 const TASK_KEYS = ['id', 'subject', 'description', 'assignee', 'dependencies'] as const
 
@@ -38,6 +38,11 @@ export interface TeamProfileMemberConfig {
   reasoning_effort?: string
   executionPrompt?: string
   fallback?: TeamModelFallbackConfig
+  /**
+   * Owner-declared tool-policy id this profile member selects (#59). The
+   * profile only names a configured policy; it never carries raw tool lists.
+   */
+  tool_policy?: string
 }
 
 /** One seed-task row in a named team-profile template (unresolved). */
@@ -75,6 +80,7 @@ export interface NormalizedProfileMember {
   reasoningEffort?: string
   executionPrompt?: string
   fallback?: TeamModelFallbackConfig
+  toolPolicy?: string
 }
 
 /** A profile seed task after assignee canonicalization; `sourceIndex` is the YAML order. */
@@ -460,10 +466,11 @@ function normalizeMember(
   const reasoningEffort = optionalNonEmptyString(raw['reasoning_effort'], `${path}.reasoning_effort`)
   const executionPrompt = optionalNonEmptyString(raw['executionPrompt'], `${path}.executionPrompt`)
   const fallback = normalizeFallback(raw['fallback'], `${path}.fallback`)
+  const toolPolicy = optionalNonEmptyString(raw['tool_policy'], `${path}.tool_policy`)
   if (provider !== undefined && model === undefined) {
     throw new Error(`profile member "${name}" sets provider without model`)
   }
-  return omitUndefined({ name, role, provider, model, reasoningEffort, executionPrompt, fallback })
+  return omitUndefined({ name, role, provider, model, reasoningEffort, executionPrompt, fallback, toolPolicy })
 }
 
 function normalizeFallback(value: unknown, path: string): TeamModelFallbackConfig | undefined {

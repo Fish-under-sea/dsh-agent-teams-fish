@@ -13,7 +13,8 @@
  * @module dsh-agent-teams/state
  */
 import { type TaskStatus, type TeamMessage, type TeamState, type TeamTask } from './types.ts';
-export { amendTaskContract, buildCoverageMatrix, canDeclareDelivery, classifyChangedPath, collectChangedPaths, defaultQualityDeliveryGraph, describeQualityLoop, evaluateQualityCompletion, hasValidQualityTaskFields, isQualityKind, isTaskRevision, normalizeBlankOptionalTaskFields, pathMatchesScope, planQualityFollowUp, qualityPlanningPrompt, resumeTeamState, sanitizeReviewAcceptance, sanitizeReviewObjective, taskKindOf, validateCreateTask, } from './quality-gates.ts';
+import { type LeadIdentity } from './lineage.ts';
+export { amendTaskContract, buildCoverageMatrix, canDeclareDelivery, classifyChangedPath, collectChangedPaths, defaultQualityDeliveryGraph, describeQualityLoop, evaluateQualityCompletion, hasValidQualityTaskFields, isQualityKind, isTaskRevision, isValidFindingLine, normalizeBlankOptionalTaskFields, normalizeSentinelNumericTaskFields, pathMatchesScope, planQualityFollowUp, qualityPlanningPrompt, resumeTeamState, sanitizeReviewAcceptance, sanitizeReviewObjective, taskKindOf, validateCreateTask, } from './quality-gates.ts';
 export type { ContractAmendmentInput } from './quality-gates.ts';
 /** Mailbox key of the captain. */
 export declare const CAPTAIN_KEY = "captain";
@@ -116,18 +117,22 @@ export declare function recordRetiredMemberIds(stateRoot: string, memberIds: rea
  * Find the team owned by one captain session (at most one per captain).
  * @param stateRoot - resolved absolute state root directory.
  * @param captainSessionId - the owning session id.
+ * @param lead - durable lead identity of the calling session, when it may lead
+ *   through a fork chain; omitted keeps the exact-id contract.
  * @returns the team record, or undefined when the captain leads no team.
  */
-export declare function findTeamByCaptain(stateRoot: string, captainSessionId: string): Promise<TeamState | undefined>;
+export declare function findTeamByCaptain(stateRoot: string, captainSessionId: string, lead?: LeadIdentity): Promise<TeamState | undefined>;
 /**
  * Find the team in which one session is an active participant.
- * Captains match `captainSessionId`; members match their durable child session
- * id. Removed members no longer have access to team-scoped tools.
+ * Captains match `captainSessionId` — including a lead session that inherited
+ * it through a fork — and members match their durable child session id.
+ * Removed members no longer have access to team-scoped tools.
  * @param stateRoot - resolved absolute state root directory.
  * @param agentSessionId - calling captain/member session id.
+ * @param lead - durable lead identity of the calling session, when available.
  * @returns the team record, or undefined when the caller belongs to no team.
  */
-export declare function findTeamByParticipant(stateRoot: string, agentSessionId: string): Promise<TeamState | undefined>;
+export declare function findTeamByParticipant(stateRoot: string, agentSessionId: string, lead?: LeadIdentity): Promise<TeamState | undefined>;
 /** Build a fresh message record. */
 export declare function createMessage(from: string, to: string, content: string): TeamMessage;
 /**
@@ -193,6 +198,18 @@ export interface AtomicReplaceOptions {
  * @returns nothing once the file has been replaced by one of the two paths.
  */
 export declare function replaceFileAtomicOrDirect(temporary: string, file: string, content: string, primitives: AtomicReplacePrimitives, options?: AtomicReplaceOptions): Promise<void>;
+/**
+ * Name the first durable defect in a record `coerceTeamState` rejected. Before
+ * this, a rejected `team.json` surfaced only as
+ * `invalid AgentTeams state in team "x"` — no task, no field, no value — while
+ * every AgentTeams tool (read *and* write) failed at once, leaving an operator
+ * to bisect the file by hand (issue #188). The detail is computed only on the
+ * failure path, so the happy path keeps its existing cost.
+ * @param raw - the parsed record as read from disk, before coercion.
+ * @param expectedId - the team id the record was read for.
+ * @returns a `task "t2": findings[0].line -1 must be ...` style detail.
+ */
+export declare function describeTeamStateDefect(raw: unknown, expectedId: string): string;
 export declare function isTeamTask(value: unknown): value is TeamTask;
 /**
  * Remove a team's whole directory (members should be interrupted first).
