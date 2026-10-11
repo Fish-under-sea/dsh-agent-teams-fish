@@ -67,11 +67,11 @@ test('a brand request for a newly added vendor stays inside the family', () => {
     'brand.svg',
     'brand.png',
   ])
-  // 新厂商的岗位图缺失时只沿 vendor 兜底，不会退到别的厂商。
+  // 新厂商的岗位图缺失时先沿 vendor 兜底（自家角色），岗位通用图留作链尾。
   assert.deepEqual(artworkCandidates('member-ernie-engineer-v2.png'), [
     'member-ernie-engineer-v2.png',
-    'member-engineer-v2.png',
     'member-ernie-v2.png',
+    'member-engineer-v2.png',
   ])
 })
 
@@ -92,22 +92,40 @@ test('a non-png member request stays refused even after the brand family', () =>
   assert.deepEqual(artworkCandidates('member-deepseek-qa-v2.svg'), [])
 })
 
-test('a vendor+role request degrades to role, then vendor', () => {
+test('a vendor+role request degrades to the vendor character, then the role', () => {
+  // 2026-10-11 修复：链序曾是 `vendor+role → role → vendor`。岗位通用图（随包鲸鱼）对
+  // 每个岗位都存在，所以「岗位」那一跳**永远**抢先命中，「厂商通用图」那一跳是死代码 ——
+  // 于是只有通用档的 7 家（meta / mistral / rwkv / seed / ernie / stepfun / jev）的
+  // 厂商角色永远不可达：徽标明明显示 StepFun，头像却是通用岗位鲸鱼（用户截图现场）。
+  // 现在把厂商那一跳提到岗位之前：厂商身份是这套头像的主诉求，岗位图仍然在链尾兜底。
   assert.deepEqual(artworkCandidates('member-deepseek-qa-v2.png'), [
     'member-deepseek-qa-v2.png',
-    'member-qa-v2.png',
     'member-deepseek-v2.png',
+    'member-qa-v2.png',
   ])
 })
 
-test('a -full request also lists its non-full sibling', () => {
+test('a generic-only vendor reaches its own character on the second hop', () => {
+  // 只有通用图的厂商：第 1 跳落空后必须命中自家角色，而不是掉回岗位通用鲸鱼。
+  for (const vendor of ['meta', 'mistral', 'rwkv', 'seed', 'ernie', 'stepfun', 'jev']) {
+    assert.deepEqual(artworkCandidates(`member-${vendor}-qa-v2.png`), [
+      `member-${vendor}-qa-v2.png`,
+      `member-${vendor}-v2.png`,
+      'member-qa-v2.png',
+    ], `${vendor} 的厂商角色必须可达`)
+  }
+})
+
+test('a -full request prefers the vendor HD art over the role avatar', () => {
+  // 厂商立绘（member-<vendor>-full-v2.webp）此前同样是死文件：`-full` 链在岗位那一段
+  // 就命中 256 头像，厂商大图永远轮不到。点击放大必须给出厂商立绘。
   assert.deepEqual(artworkCandidates('member-deepseek-qa-full-v2.png'), [
     'member-deepseek-qa-full-v2.png',
     'member-deepseek-qa-v2.png',
-    'member-qa-full-v2.png',
-    'member-qa-v2.png',
     'member-deepseek-full-v2.png',
     'member-deepseek-v2.png',
+    'member-qa-full-v2.png',
+    'member-qa-v2.png',
   ])
 })
 
@@ -140,8 +158,8 @@ test('an unknown vendor or role token degrades to what is known', () => {
   assert.deepEqual(artworkCandidates('member-deepseek-evil-v2.png'), ['member-deepseek-v2.png'])
   assert.deepEqual(artworkCandidates('member-deepseek-qa-evil-v2.png'), [
     'member-deepseek-qa-v2.png',
-    'member-qa-v2.png',
     'member-deepseek-v2.png',
+    'member-qa-v2.png',
   ])
 })
 

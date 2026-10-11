@@ -79,6 +79,7 @@ import {
   leadArtUrl,
   leadFullArtUrl,
   memberArtUrl,
+  memberFullArtUrl,
   memberRoleSlug,
   vendorSlug,
 } from '../lib/client/artwork.js'
@@ -454,6 +455,43 @@ check(
     return first === `member-${vendor}-${memberRoleSlug(name, role)}-v2.png` && packagedArtworkSet.has(first)
   })),
   'the vendor namespace degraded to the packaged whale or a role-generic image',
+)
+// 链序曾经是 `vendor+role → role → vendor`，而岗位通用图对**每一个**岗位都存在，
+// 于是岗位那一跳永远抢先命中，厂商那一跳是死代码：
+//  - 只有通用档的 7 家的厂商角色永远不可达（现场症状正是「徽标显示 StepFun，
+//    头像却是通用岗位鲸鱼」）；
+//  - `member-<vendor>-full-v2.webp`（17 张厂商立绘）同样永远轮不到。
+// 这两件事都瞒过了当时全部门禁：素材齐、降级链「有结果」、第一跳也正确 ——
+// 断的是**第二跳**。所以这里逐厂商钉住第 2 跳必须落在自家角色上。
+check(
+  'a generic-only vendor reaches its own character on the second hop',
+  GENERIC_ONLY_VENDORS.every(vendor => canonicalRoster.every(([name, role]) => {
+    const chain = artworkCandidates(memberArtUrl(name, role, vendor).slice(ART_BASE.length))
+    return chain[1] === `member-${vendor}-v2.png` && packagedArtworkSet.has(chain[1])
+  })),
+  'the vendor hop sits behind the role hop, so a vendor character can never be reached',
+)
+// 同时钉住整体顺序：厂商那一跳必须排在岗位那一跳之前（不限厂商档位）。
+check(
+  'the vendor hop precedes the role hop for every vendor+role request',
+  ARTWORK_VENDORS.every(vendor => ARTWORK_ROLES.every(role => {
+    const chain = artworkCandidates(`member-${vendor}-${role}-v2.png`)
+    const vendorHop = chain.indexOf(`member-${vendor}-v2.png`)
+    const roleHop = chain.indexOf(`member-${role}-v2.png`)
+    return vendorHop !== -1 && roleHop !== -1 && vendorHop < roleHop
+  })),
+  'a role-generic image is preferred over the member\'s own vendor character',
+)
+// `-full`（点击放大）同理：有厂商立绘的厂商必须给出厂商立绘，而不是 256 岗位头像。
+check(
+  'the click-to-enlarge request prefers the vendor HD art over the role avatar',
+  [...ROLE_ART_VENDORS, ...GENERIC_ONLY_VENDORS].every(vendor => {
+    const chain = artworkCandidates(memberFullArtUrl('QA', 'QA Engineer', vendor).slice(ART_BASE.length))
+    const vendorFull = chain.indexOf(`member-${vendor}-full-v2.png`)
+    const roleFull = chain.indexOf('member-qa-full-v2.png')
+    return vendorFull !== -1 && roleFull !== -1 && vendorFull < roleFull
+  }),
+  'the large preview degrades to a 256 role avatar while a vendor portrait ships in the bundle',
 )
 // 队长图曾长期是硬编码常量 `team-lead-deepseek-v2.png`：素材齐、降级链通、
 // `artworkReachesPackage(LEAD_ART)` 也是绿的，于是「队长换成 qwen / claude / glm

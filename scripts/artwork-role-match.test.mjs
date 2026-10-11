@@ -189,6 +189,94 @@ test('新增 stepfun / jev 的识别边界与优先级', () => {
 })
 
 /**
+ * 2026-10-11 厂商识别细化（第二轮）：`step` 家族只认「step + 数字」是不够的。
+ *
+ * 阶跃星辰官方模型 ID 里有一大批**字母后缀**家族（`step-asr` / `step-tts-mini` /
+ * `stepaudio-3-realtime` / `step-r1-v-mini` / `step-video-t2v`），旧规则
+ * `\bstep[-_.]?\d` 要求 step 后跟数字，这些全部漏命中。它们的共同形态是
+ * **`step` 后跟分隔符再跟字母**，所以补一条 `\bstep[-_.][a-z]` 即可，
+ * 仍然排除了 `stepper` / `steps` / `stepstone`（step 后直接跟字母，无分隔符）。
+ */
+test('stepfun：字母后缀家族也必须命中（step-asr / step-tts-mini / stepaudio）', () => {
+  // 官方文档 https://platform.stepfun.com/docs/zh/guides/models/overview 里公开的 ID
+  for (const model of [
+    'step-5-preview', 'step-3.7-flash', 'step-3.5-flash',
+    'step-1o-turbo-vision', 'step-1o-audio', 'step-1x-medium',
+    'step-asr', 'step-tts-mini', 'step-r1-v-mini', 'step-video-t2v',
+  ]) {
+    assert.equal(vendorSlug({ provider: 'cn-f', model }), 'stepfun', `${model} 应命中 stepfun`)
+  }
+  // `stepaudio-*` 家族连分隔符都没有，单独认
+  for (const model of ['stepaudio-3-realtime', 'stepaudio-2.5-chat', 'stepaudio-2.5-asr']) {
+    assert.equal(vendorSlug({ provider: 'cn-f', model }), 'stepfun', `${model} 应命中 stepfun`)
+  }
+  // 仍然不能吞普通英文词：step 后面直接跟字母的不认
+  for (const model of ['stepper', 'steps', 'stepstone', 'footsteps', 'stepper-motor', 'javascript-steps']) {
+    assert.equal(vendorSlug({ provider: 'some', model }), undefined, `${model} 不应被误识别`)
+  }
+})
+
+/**
+ * 智谱的非 GLM 家族此前整片漏命中：`charglm` / `codegeex` / `cogview` /
+ * `cogvideo` / `glm` 之外的 `bigmodel`（平台名）都认不出来。
+ */
+test('glm：智谱的 charglm / codegeex / cogview 家族与 bigmodel 平台名', () => {
+  for (const model of ['charglm-3', 'charglm-4', 'codegeex-4', 'cogview-3', 'cogview-4', 'cogvideo-x']) {
+    assert.equal(vendorSlug({ provider: 'zai', model }), 'glm', `${model} 应命中 glm`)
+  }
+  assert.equal(vendorSlug({ provider: 'bigmodel', model: 'unknown-model' }), 'glm')
+})
+
+/**
+ * 其余厂商的补充别名（都是官方平台名 / 模型家族名，来自各自开放平台文档）。
+ */
+test('其余厂商的官方别名补齐', () => {
+  // 阿里云：百炼之外的平台名（DashScope 是官方 SDK / 平台名）
+  assert.equal(vendorSlug({ provider: 'dashscope', model: 'qwen-max' }), 'qwen')
+  assert.equal(vendorSlug({ provider: 'aliyun', model: 'unknown' }), 'qwen')
+  // 字节：BytePlus（海外站）与 Skylark（火山方舟模型旧名）
+  assert.equal(vendorSlug({ provider: 'byteplus', model: 'seed-1.6' }), 'seed')
+  assert.equal(vendorSlug({ provider: 'volcengine', model: 'skylark-lite' }), 'seed')
+  // MiniMax 的语音 / 视频模型在 provider 段已能命中，这里作为回归钉住
+  assert.equal(vendorSlug({ provider: 'minimax', model: 'speech-02-hd' }), 'minimax')
+  assert.equal(vendorSlug({ provider: 'minimax', model: 'video-01' }), 'minimax')
+})
+
+/**
+ * Google 的非 gemini 家族：`palm` / `bison` / `gecko` 与 Vertex 平台名。
+ */
+test('gemini：Google 的 palm / bison 家族与 vertex 平台名', () => {
+  for (const model of ['palm-2', 'text-bison-001', 'text-gecko-001']) {
+    assert.equal(vendorSlug({ provider: 'google', model }), 'gemini', `${model} 应命中 gemini`)
+  }
+  // Vertex AI 是 Google 的托管平台名（provider 段常见）
+  assert.equal(vendorSlug({ provider: 'vertex', model: 'unknown' }), 'gemini')
+  // palmyra（Writer 的模型家族）不是 Google 的 palm：靠分隔符区分
+  assert.equal(vendorSlug({ provider: 'some', model: 'palmyra-x5' }), undefined)
+})
+
+/**
+ * 负例防护：上面放宽之后不得吞掉真正的无关词。
+ *
+ * 诚实边界：`\bseed[\w.-]*` 会吞 `seeder-2`、`\bmeta\b` 会吞 `meta-analysis`，
+ * 但这两条**不能收紧** —— 收紧就丢掉真实的 `seedream-3.0` 与 `meta-llama/Llama-3.3`。
+ * 权衡后按现状保留，只钉住真正该修的那条：`\bern[\w.-]*` 吞掉 `ernest`。
+ */
+test('放宽别名后仍不吞无关词（含 ernie 前缀收紧）', () => {
+  // 百度家族的真实 ID 全部以 `ernie` 开头，`ern` 前缀没有存在理由：
+  // 它把 `ernest-1` / `ernestine` 这类普通英文词判成了文心一言。
+  assert.equal(vendorSlug({ provider: 'some', model: 'ernest-1' }), undefined)
+  assert.equal(vendorSlug({ provider: 'some', model: 'ernestine' }), undefined)
+  // 真实 ID 不受影响
+  assert.equal(vendorSlug({ provider: 'baidu', model: 'ernie-4.5-turbo' }), 'ernie')
+  for (const model of ['metaphor-3', 'metadata-model', 'hypothesis', 'stepstone']) {
+    assert.equal(vendorSlug({ provider: 'some', model }), undefined, `${model} 不应被误识别`)
+  }
+  // palmyra（Writer 的模型）不是 Google 的 palm，靠分隔符区分
+  assert.equal(vendorSlug({ provider: 'some', model: 'palmyra-x5' }), undefined)
+})
+
+/**
  * 新增厂商的队长图与商标必须登记进宿主白名单。
  *
  * 队长图的 vendor token 直接来自 `artworkCandidates` 的 `ARTWORK_VENDORS`
