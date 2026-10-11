@@ -16,9 +16,17 @@
 
 ---
 
-> **🆕 0.5.0 (2026-10-11)**: vendor namespace **15 → 17**, adding **StepFun** and **Jev** (TypeSafe System One).
+> **🆕 [0.5.1](release-notes/v0.5.1.md) (2026-10-11)**: fixes a degradation-chain defect that made an entire vendor art tier **unreachable**, and closes a batch of vendor-recognition misses on real model IDs.
 >
-> - **Tier**: both ship only a generic vendor portrait + HD portrait — the same tier as `meta` / `mistral` / `rwkv` / `seed` / `ernie`. A member request for `member-<vendor>-<role>-v2.png` misses hop 1 and lands on the **role-generic** image at hop 2, so avatars keep rendering with no broken images.
+> - **Root cause**: the chain used to be `vendor+role → role → vendor`. A role-generic image (`member-<role>-v2.png`, the 8 packaged whales) exists for **every** role, so the *role* hop always won and the *vendor* hop was dead code. The symptom on screen was "the badge already shows the StepFun mark, yet the avatar is the generic role whale" — **vendor detection was right; the chain order was wrong**.
+> - **Impact**: the vendor character was permanently unreachable for the **7 vendors** that ship only a generic portrait (`meta` / `mistral` / `rwkv` / `seed` / `ernie` / `stepfun` / `jev`); and `member-<vendor>-full-v2.webp` (**17 vendor portraits**) could never win, so click-to-enlarge only ever produced a 256px role avatar.
+> - **Fix**: the chain is now **`vendor+role → vendor → role`** — vendor identity is the point of this art system, so vendor wins; the role image stays at the tail as before.
+> - **Why the gate missed it**: it only pinned **hop 1** (`vendor+role` must resolve to its own file), while the accident happened at hop 2. Three assertions were added: hop 2 must reach the vendor's own portrait, the vendor hop index must precede the role hop, and `-full` must prefer the vendor portrait.
+> - **Recognition refinements**: added StepFun's **letter families** (`step-asr` / `step-tts-mini` / `stepaudio-*` — the old rule required a digit after `step`, missing them all), GLM's `charglm` / `codegeex` / `cogview` / `cogvideo`, qwen's `dashscope` / `aliyun`, Gemini's `palm-<digit>` / `bison` / `gecko` / `vertex`, seed's `byteplus` / `skylark`, minimax's `speech-<digit>`; and tightened `\bern` to `\bernie` (the old prefix misjudged `ernest` / `ernestine` as ERNIE). See [0.5.1](release-notes/v0.5.1.md).
+>
+> **🆕 [0.5.0](release-notes/v0.5.0.md) (2026-10-11)**: vendor namespace **15 → 17**, adding **StepFun** and **Jev** (TypeSafe System One).
+>
+> - **Tier**: both ship only a generic vendor portrait + HD portrait — the same tier as `meta` / `mistral` / `rwkv` / `seed` / `ernie`. A member request for `member-<vendor>-<role>-v2.png` misses hop 1, and [0.5.1](release-notes/v0.5.1.md) then made hop 2 land on **the vendor's own character** ([0.5.0](release-notes/v0.5.0.md) itself mistakenly landed on the role-generic image; see above).
 > - **Recognition**: `stepfun` matches the provider name, the `step-<digit>` model family, and 阶跃. The model-family clause is required: this machine's real routes are `cn-f/cline/cline-free/step-5-preview`-style, whose **provider segment never contains "stepfun"** — matching the provider alone drops the whole team to fallback art (the same class of defect fixed for `hunyuan3` in [0.4.1](release-notes/v0.4.1.md)). `jev` matches `jev` / `typesafe` / `type-safe`.
 > - **Boundaries**: both keep word boundaries, so `stepper` / `steps` / `stepstone` / `jevons` / `jevenile` are not swallowed (pinned by unit tests).
 > - **Assets**: 6 new files (2 × 256×256 RGBA avatars, 2 × alpha WebP HD portraits, 2 brand SVGs); the asset directory goes **280 → 286 files**.
@@ -82,7 +90,7 @@ This fork **does not touch that collaboration logic** — it only adds "what the
 | Chinese role labels | Role labels in the panel and cards display in Chinese (工程师, 测试, 安全, 研究员, 设计, 文档, 数据, 运营, 音频, 视频) | `src/client/locales.ts` |
 | Click-to-enlarge | Clicking an avatar opens a 320px large preview (automatically degrades to the avatar when the `-full` file is missing); close with Esc or by clicking the backdrop | `ActivityPanel.tsx` |
 | Captain avatar | The captain **follows its own model route**: team creation records the captain's `provider`/`model` into `team.json` (`captainProvider` / `captainModel`), and the panel requests `team-lead-<vendor>-v2.png`, falling back to `team-lead-v2.png` when the vendor is unknown — and **requests a brand-new URL** to bypass the browser's 24h cache | `src/client/artwork.ts` · `src/tools.ts` · `src/snapshot.ts` |
-| Vendor-generic portrait fallback | When the vendor is recognized but the role-specific art is missing, `member-<vendor>-v2.png` is tried first, then packaged assets | `src/client/artwork.ts` |
+| Vendor-generic portrait fallback | When the vendor is recognized but the role-specific art is missing, `member-<vendor>-v2.png` is used — **this vendor hop now precedes the role-generic image** (fixed in [0.5.1](release-notes/v0.5.1.md); the order used to be reversed, turning the hop into dead code) | `src/client/artwork.ts` · `src/artwork-source.ts` |
 | Tightened cache policy | When `artworkDir` is configured, all artwork responses use `no-store` (previously packaged assets used `max-age=86400`, causing "changed the image but it looks the same") | `src/index.ts` |
 | High-resolution preview family (2026-10-08) | List thumbnails remain 256 PNG; click-to-enlarge uses the **original-resolution** artwork after background removal (role/captain at 1024×1024, vendor portraits with long edge ≤2048), encoded as WebP quality 92 with alpha — the full set of 125 HD images totals ~19 MB, whereas PNG at the same resolution would be ~125 MB | `assets/agent-teams/` |
 | Second-round vendor assets (2026-10-08) | Vendor namespace expanded from 9 → 15; vendor assets from 108 → 265 files; `audio` / `video` role buckets (previously registered but without art) completed for 10 vendors; assets split into two tiers: the first 10 vendors have full "vendor × role" sets, the remaining 5 have only generic portraits and HD portraits | `assets/agent-teams/` · `scripts/import-vendor-artwork.mjs` |
@@ -91,6 +99,8 @@ This fork **does not touch that collaboration logic** — it only adds "what the
 | **Refined vendor matching + two systemic fixes** ([0.4.1](release-notes/v0.4.1.md)) | ① A trailing `\b` blocked "name + digits" ids: `hunyuan3` / `rwkv7` / `seed1.6` / `abab6.5s` / `chatglm3-6b` all failed to match; ② **`\b` never holds next to CJK** (JS `\w` is ASCII-only), so the Chinese aliases 混元 / 通义 / 智谱 / 豆包 / 文心 / 千帆 were **dead branches all along**. This release closes **18 misses** — the hunyuan `hy` family (`hy3` / `hy-3` / `hy_1.5`), minimax (`abab6.5s` / `hailuo`), the mistral family (`magistral` / `pixtral` / `voxtral` / `ministral`), qwen (`qwq`) and more — with zero false positives (`hypothesis` / `hybrid-1` / `hyperbolic` / `orchestral-music` / `metadata-model` still do not match) | `src/client/artwork.ts` · `scripts/artwork-role-match.test.mjs` |
 | **Captain avatar follows the route** ([0.4.2](release-notes/v0.4.2.md)) | The captain image used to be a hard-coded constant `team-lead-deepseek-v2.png`, so a captain running qwen / claude / glm still requested the DeepSeek one — the **other 9 packaged captain images were unreachable**. The root cause was the host side: `team.json` recorded only `captainSessionId`, never the captain's model route. Team creation now writes `captainProvider` / `captainModel`, the snapshot exposes them (live value wins), and the panel uses the same vendor detection as members | `src/client/artwork.ts` · `src/tools.ts` · `src/snapshot.ts` · `src/types.ts` |
 | **Contradictory README line fixed** ([0.4.3](release-notes/v0.4.3.md)) | The [0.4.2](release-notes/v0.4.2.md) release missed the "Captain does not follow model routing" line in the known-limitations table, leaving the same README asserting both the old and new behavior. **An npm package's README is frozen at publish time and cannot be edited afterwards**, so 0.4.3 re-publishes the corrected text; functionality is identical to [0.4.2](release-notes/v0.4.2.md) — a documentation-only release | `README.md` · `README.en.md` |
+| **Third-round vendor assets** ([0.5.0](release-notes/v0.5.0.md)) | Vendor namespace 15 → 17, adding **StepFun** and **Jev** (TypeSafe System One), both in the "generic portrait + HD portrait only" tier (same as `meta` / `rwkv`). `stepfun` matches the provider name, the `step-<digit>` family and 阶跃 — the model-family clause is required because this machine's Step routes never name stepfun in the provider segment; `jev` matches `jev` / `typesafe` / `type-safe`, both keeping word boundaries | `src/client/artwork.ts` · `src/artwork-source.ts` · `assets/agent-teams/` · `scripts/verify.mjs` |
+| **Degradation-chain fix + refined vendor matching** ([0.5.1](release-notes/v0.5.1.md)) | ① **Chain defect**: the old `vendor+role → role → vendor` order let the role-generic image always win, making the vendor hop dead code — the vendor character of the 7 generic-only vendors and all 17 vendor portraits were permanently unreachable (on screen: "badge shows StepFun, avatar is the generic role whale"). Now **`vendor+role → vendor → role`**, with 3 new gate assertions (hop 2 reachable, vendor hop before role hop, `-full` prefers the vendor portrait) — the old gate only pinned hop 1 while the accident happened at hop 2. ② **Recognition**: added StepFun's letter families (`step-asr` / `step-tts-mini` / `stepaudio-*`), GLM's `charglm` / `codegeex` / `cogview` / `cogvideo`, qwen's `dashscope` / `aliyun`, Gemini's `palm-<digit>` / `bison` / `gecko` / `vertex`, seed's `byteplus` / `skylark`, minimax's `speech-<digit>`, and tightened `\bern` to `\bernie` so `ernest` is no longer swallowed | `src/artwork-source.ts` · `src/client/artwork.ts` · `scripts/verify.mjs` · `scripts/*.test.mjs` |
 
 ## Installation & Activation
 
@@ -108,7 +118,7 @@ You can also add it manually to `profiles/<profile>/package.json`:
 
 ```jsonc
 "dependencies": {
-  "dsh-agent-teams-fish": "^0.5.0"
+  "dsh-agent-teams-fish": "^0.5.1"
 }
 ```
 
@@ -195,7 +205,7 @@ Enable the plugin in `profiles/<profile>/cordis.patch.yml`. Vendor assets alread
 | `team-lead-<vendor>-full-v2.webp` | 10 | 1024×1024 RGBA WebP |
 | `brand-<vendor>.svg` | 15 | Inline path, fully offline (no external links, no scripts) |
 
-> Vendor assets come in two tiers: `deepseek` `qwen` `glm` `kimi` `claude` `gemini` `grok` `gpt` `hunyuan` `minimax` — these 10 have full "vendor × role" sets (avatars + HD) and captain art; `meta` `mistral` `rwkv` `seed` `ernie` have only vendor-generic avatars and HD portraits — role requests fall back through `member-<vendor>-v2.png` (the 3rd hop in the degradation chain, never 404s).
+> Vendor assets come in two tiers: `deepseek` `qwen` `glm` `kimi` `claude` `gemini` `grok` `gpt` `hunyuan` `minimax` — these 10 have full "vendor × role" sets (avatars + HD) and captain art; `meta` `mistral` `rwkv` `seed` `ernie` `stepfun` `jev` have only vendor-generic avatars and HD portraits — role requests resolve to `member-<vendor>-v2.png` (now the **2nd** hop, ahead of the role-generic image, since [0.5.1](release-notes/v0.5.1.md); it used to be the 3rd hop and was therefore never reachable).
 
 > ⚠️ **The packaged directory only recognizes names in the candidate chain (with `-v2`)**: `member-qwen-qa.png` in `artworkDir` can hit via alias fallback, but the packaged directory does not perform this alias fallback. The import script uniformly adds `-v2` — manually copying files without the suffix into the package causes "the file is clearly there, but the request always misses." `pnpm verify` now asserts all 271 files with their dimensions and formats (including encoding and alpha for both families).
 
@@ -204,12 +214,14 @@ Enable the plugin in `profiles/<profile>/cordis.patch.yml`. Vendor assets alread
 ```text
 Request: member-qwen-qa-v2.png
   ├─ 1. member-qwen-qa-v2.png     Vendor + role (packaged)
-  ├─ 2. member-qa-v2.png          Role-generic
-  ├─ 3. member-qwen-v2.png        Vendor-generic (packaged)
+  ├─ 2. member-qwen-v2.png        Vendor-generic (packaged)
+  ├─ 3. member-qa-v2.png          Role-generic
   └─ 4. Built-in whale assets
 ```
 
-Requests with `-full` additionally list the non-full variant of the same name (so clicking to enlarge works even without a dedicated portrait); the packaged HD family is `.webp`, which the host discovers via extension probing, so "list thumbnail + click-to-enlarge HD" share a single request name. Brand chain: `brand-<vendor>.svg → brand-<vendor>.png → brand.svg → brand.png` — when none exist, the frontend automatically falls back to the activity state image.
+**The order is `vendor+role → vendor → role`: the vendor hop must precede the role hop** (fixed in [0.5.1](release-notes/v0.5.1.md)). The order used to be reversed, and since a role-generic image exists for **every** role, the role hop always won and the vendor hop became dead code — the vendor character was permanently unreachable for the 7 vendors that ship only a generic portrait (`meta` / `mistral` / `rwkv` / `seed` / `ernie` / `stepfun` / `jev`), and the 17 vendor portraits could never win either. On screen this looked like "the badge already shows the StepFun mark, yet the avatar is the generic role whale".
+
+Requests with `-full` additionally list the non-full variant of the same name (so clicking to enlarge works even without a dedicated portrait), and likewise **prefer the vendor portrait over the role avatar**; the packaged HD family is `.webp`, which the host discovers via extension probing, so "list thumbnail + click-to-enlarge HD" share a single request name. Brand chain: `brand-<vendor>.svg → brand-<vendor>.png → brand.svg → brand.png` — when none exist, the frontend automatically falls back to the activity state image.
 
 ### Vendor Identification Rules
 
@@ -217,14 +229,21 @@ Lowercase regex matching against `provider + model` concatenated:
 
 | Token | Matches | Token | Matches |
 |-------|---------|-------|---------|
-| `deepseek` | deepseek | `gemini` | gemini / gemma / google |
-| `qwen` | qwen / tongyi / 通义 | `grok` | grok / xai / x.ai |
-| `glm` | chatglm / glm / zai / z.ai / 智谱 | `gpt` | gpt / chatgpt / openai / codex |
-| `kimi` | kimi / moonshot | `hunyuan` | hunyuan / 混元 / tencent |
-| `claude` | claude / anthropic | `minimax` | minimax / mini-max / abab |
+| `deepseek` | deepseek | `gemini` | gemini / gemma / palm-\<digit\> / bison / gecko / google / vertex |
+| `qwen` | qwen / tongyi / dashscope / aliyun / 通义 | `grok` | grok / xai / x.ai |
+| `glm` | glm / chatglm / charglm / codegeex / cogview / cogvideo / zai / z.ai / zhipu / bigmodel / 智谱 | `gpt` | gpt / chatgpt / openai / codex |
+| `kimi` | kimi / moonshot | `hunyuan` | hunyuan / hy\<digit\> / 混元 / tencent |
+| `claude` | claude / anthropic | `minimax` | minimax / mini-max / abab / hailuo / speech-\<digit\> |
 | `meta` | meta / llama | `mistral` | mistral\* / mixtral / codestral / devstral |
-| `rwkv` | rwkv | `seed` | seed / doubao / 豆包 / bytedance / volcengine / volces |
-| `ernie` | ern\* / wenxin / 文心 / baidu / qianfan / 千帆 | | |
+| `rwkv` | rwkv | `seed` | seed / doubao / 豆包 / bytedance / byteplus / volcengine / volces / skylark |
+| `ernie` | ernie\* / wenxin / 文心 / baidu / qianfan / 千帆 | `stepfun` | stepfun / `step-<digit>` / `step-<letter>` / stepaudio\* / 阶跃 |
+| `jev` | jev / typesafe / type-safe | | |
+
+> **Why `stepfun` must match model families**: this machine's three Step routes have provider segments like `cn-f/cline/cline-free`, which contain **not a single letter of "stepfun"**, while the model is `step-5-preview`. Matching the provider name alone drops the whole team to fallback art — the same class of defect fixed for `hunyuan3` / `rwkv7` / `seed1.6` in [0.4.1](release-notes/v0.4.1.md).
+>
+> **The `step-<letter>` clause is equally required** (added in [0.5.1](release-notes/v0.5.1.md)): StepFun's official ID list contains many letter-suffixed families (`step-asr` / `step-tts-mini` / `step-r1-v-mini` / `step-video-t2v`), and the old `step[-_.]?\d` required a **digit** after `step`, so all of them were missed. The patterns `step[-_.][a-z]` and `stepaudio[\w.-]*` close that gap.
+>
+> All of them keep word boundaries: `stepper` / `steps` / `stepstone` / `jevons` / `jevenile` are not swallowed (pinned by unit tests).
 
 ### Production Pipeline (how this fork's art is made)
 

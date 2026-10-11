@@ -16,9 +16,17 @@
 
 ---
 
-> **🆕 0.5.0（2026-10-11）**：厂商命名空间 **15 → 17**，新增 **StepFun（阶跃星辰）** 与 **Jev（TypeSafe System One）**。
+> **🆕 0.5.1（2026-10-11）**：修掉让**厂商头像整档不可达**的降级链缺陷，并补齐一批真实模型 ID 的厂商漏命中。
 >
-> - **档位**：两家都只有「厂商通用图 + 立绘高清」这一档，与既有的 `meta` / `mistral` / `rwkv` / `seed` / `ernie` 同档。成员请求 `member-<vendor>-<role>-v2.png` 时，降级链第 1 跳落空、第 2 跳命中**岗位通用图** —— 头像照常显示，**不会破图**。
+> - **根因**：链序曾是 `vendor+role → role → vendor`。岗位通用图（随包 8 张鲸鱼）对**每一个**岗位都存在，所以「岗位」那一跳**永远**抢先命中，「厂商」那一跳是死代码。现场症状正是「徽标已是 StepFun 商标，头像却是通用岗位鲸鱼」——**厂商识别是对的，坏的是链序**。
+> - **影响**：只有厂商通用图的 **7 家**（`meta` / `mistral` / `rwkv` / `seed` / `ernie` / `stepfun` / `jev`）厂商角色永远不可达；`member-<vendor>-full-v2.webp`（**17 张**厂商立绘）永远轮不到，点击放大只拿到 256 岗位头像。
+> - **修复**：链序改为 **`vendor+role → vendor → role`** —— 厂商身份是这套头像的主诉求，厂商优先；岗位图仍留在链尾兜底。
+> - **为何门禁没抓到**：当时只钉了**第 1 跳**，而事故发生在第 2 跳。现已补 3 条断言（第 2 跳可达、厂商跳下标 < 岗位跳、`-full` 优先厂商立绘）。
+> - **厂商识别细化**：按官方文档补 `stepfun` 的**字母家族**（`step-asr` / `step-tts-mini` / `stepaudio-*`，旧规则要求 step 后跟数字故整片漏）、`glm` 的 `charglm` / `codegeex` / `cogview` / `cogvideo`、`qwen` 的 `dashscope` / `aliyun`、`gemini` 的 `palm-<数字>` / `bison` / `gecko` / `vertex`、`seed` 的 `byteplus` / `skylark`、`minimax` 的 `speech-<数字>`；并把 `\bern` **收紧**为 `\bernie`（旧前缀把 `ernest` / `ernestine` 判成文心一言）。详见 [0.5.1](release-notes/v0.5.1.md)。
+>
+> **🆕 [0.5.0](release-notes/v0.5.0.md)（2026-10-11）**：厂商命名空间 **15 → 17**，新增 **StepFun（阶跃星辰）** 与 **Jev（TypeSafe System One）**。
+>
+> - **档位**：两家都只有「厂商通用图 + 立绘高清」这一档，与既有的 `meta` / `mistral` / `rwkv` / `seed` / `ernie` 同档。成员请求 `member-<vendor>-<role>-v2.png` 时第 1 跳落空，随后由 [0.5.1](release-notes/v0.5.1.md) 修正为**第 2 跳命中自家厂商角色**（[0.5.0](release-notes/v0.5.0.md) 当时误落岗位通用图，见上）。
 > - **识别规则**：`stepfun` 同时认 provider 名、`step-<数字>` 模型族与中文「阶跃」。模型族那一条是必需的：本机三条真实路由是 `cn-f/cline/cline-free/step-5-preview` 这类，**provider 段里根本没有 stepfun 字样**，只认 provider 名会让整队掉兜底头像（与 [0.4.1](release-notes/v0.4.1.md) 修过的 `hunyuan3` 是同一类病根）。`jev` 认 `jev` / `typesafe` / `type-safe`。
 > - **边界**：两者都保留词边界，`stepper` / `steps` / `stepstone` / `jevons` / `jevenile` 一类普通英文词不会被误吞（有单测钉住）。
 > - **素材**：新增 6 个文件（2 张 256×256 RGBA 头像 + 2 张 alpha WebP 立绘高清 + 2 个商标 SVG），素材目录 **280 → 286 个文件**。
@@ -84,7 +92,7 @@
 | 中文岗位名 | 面板与卡片里的岗位标签显示中文（工程师、测试、安全、研究员、设计、文档、数据、运营、音频、视频） | `src/client/locales.ts` |
 | 点击放大 | 点头像出 320px 大图预览（`-full` 文件缺失时自动降级到头像图），Esc 或点背景关闭 | `ActivityPanel.tsx` |
 | 队长头像 | 队长**跟随自己的模型路由**：建队时把队长的 `provider`/`model` 写进 `team.json`（`captainProvider` / `captainModel`），面板据此请求 `team-lead-<vendor>-v2.png`，识别不出厂商时回落 `team-lead-v2.png`；并**改请求全新 URL** 规避浏览器 24h 缓存 | `src/client/artwork.ts` · `src/tools.ts` · `src/snapshot.ts` |
-| 厂商通用大图兜底 | 识别出厂商但岗位图缺失时，先尝试 `member-<vendor>-v2.png` 厂商通用图，再回落到随包素材 | `src/client/artwork.ts` |
+| 厂商通用大图兜底 | 识别出厂商但岗位图缺失时，命中 `member-<vendor>-v2.png` 厂商通用图 —— **厂商这一跳优先于岗位通用图**（[0.5.1](release-notes/v0.5.1.md) 修正，此前顺序反了导致该跳是死代码） | `src/client/artwork.ts` · `src/artwork-source.ts` |
 | 缓存策略收紧 | 只要配了 `artworkDir`，美术资源一律 `no-store`（原来打包图带 `max-age=86400`，会造成「换了图看着没换」） | `src/index.ts` |
 | 高清预览族（2026-10-08） | 列表小图仍是 256 PNG；点击放大改用**去背后的原分辨率**画面（岗位/队长 1024×1024、厂商立绘长边 ≤2048），编成 WebP 质量 92 带 alpha —— 整套 125 张高清合计 ~19 MB，PNG 同分辨率要 ~125 MB | `assets/agent-teams/` |
 | 第二轮厂商素材（2026-10-08） | 厂商命名空间 9 → 15，厂商素材 108 → 265 张；`audio` / `video` 两个此前只登记未出图的岗位桶补齐（10 个厂商）；素材分两档：前 10 个厂商有「厂商 × 岗位」全套，后 5 个只有通用图与立绘 | `assets/agent-teams/` · `scripts/import-vendor-artwork.mjs` |
@@ -94,6 +102,7 @@
 | **队长头像跟随路由**（[0.4.2](release-notes/v0.4.2.md)） | 队长图此前是硬编码常量 `team-lead-deepseek-v2.png`，队长换成 qwen / claude / glm 时仍请求 deepseek 那张，**随包的另外 9 张队长图永远不可达**；根因是宿主端 `team.json` 只记 `captainSessionId`、没有队长的模型路由。现建队时写入 `captainProvider` / `captainModel`，快照暴露（实时值优先），面板走与成员同一套厂商识别 | `src/client/artwork.ts` · `src/tools.ts` · `src/snapshot.ts` · `src/types.ts` |
 | **README 矛盾行修正**（[0.4.3](release-notes/v0.4.3.md)） | [0.4.2](release-notes/v0.4.2.md) 发布时漏改「已知限制」表里的「队长不跟随模型路由」，导致同一份 README 里新旧两种说法并存。**npm 包内 README 在发布时冻结、事后无法修改**，故补发 [0.4.3](release-notes/v0.4.3.md) 把正确文案带上 npm；功能与 [0.4.2](release-notes/v0.4.2.md) 完全一致，仅为文档修正 | `README.md` · `README.en.md` |
 | **第三轮厂商素材**（[0.5.0](release-notes/v0.5.0.md)） | 厂商命名空间 15 → 17，新增 **StepFun（阶跃星辰）** 与 **Jev（TypeSafe System One）**，两者均落「只有通用图 + 立绘」档（与 `meta` / `rwkv` 等同档，岗位请求走降级链兜底）。`stepfun` 识别同时认 provider 名、`step-<数字>` 模型族与中文「阶跃」——**模型族那一条是必需的**，本机三条 Step 路由的 provider 段里没有 stepfun 字样，只认 provider 会整队掉兜底（与 [0.4.1](release-notes/v0.4.1.md) 修过的「名字 + 数字」病根同类）；`jev` 认 `jev` / `typesafe` / `type-safe`，两者都保留词边界 | `src/client/artwork.ts` · `src/artwork-source.ts` · `assets/agent-teams/` · `scripts/verify.mjs` |
+| **降级链修正 + 厂商识别细化**（[0.5.1](release-notes/v0.5.1.md)） | ① **链序缺陷**：原链 `vendor+role → role → vendor` 里，岗位通用图对每个岗位都存在，故「岗位」跳永远抢先命中、「厂商」跳是死代码 —— 只有通用档的 7 家厂商角色与 17 张厂商立绘永久不可达（现场症状：徽标是 StepFun、头像是通用岗位鲸鱼）。现改为 **`vendor+role → vendor → role`**，并补 3 条门禁（第 2 跳可达、厂商跳 < 岗位跳、`-full` 优先厂商立绘）——旧门禁只钉第 1 跳，而事故发生在第 2 跳。② **识别细化**：补 `stepfun` 字母家族（`step-asr` / `step-tts-mini` / `stepaudio-*`）、`glm` 的 `charglm` / `codegeex` / `cogview` / `cogvideo`、`qwen` 的 `dashscope` / `aliyun`、`gemini` 的 `palm-<数字>` / `bison` / `gecko` / `vertex`、`seed` 的 `byteplus` / `skylark`、`minimax` 的 `speech-<数字>`，并把 `\bern` 收紧为 `\bernie` 以免误吞 `ernest` | `src/artwork-source.ts` · `src/client/artwork.ts` · `scripts/verify.mjs` · `scripts/*.test.mjs` |
 
 ## 安装与启用
 
@@ -111,7 +120,7 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 
 ```jsonc
 "dependencies": {
-  "dsh-agent-teams-fish": "^0.5.0"
+  "dsh-agent-teams-fish": "^0.5.1"
 }
 ```
 
@@ -198,7 +207,7 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 | `team-lead-<vendor>-full-v2.webp` | 10 | 1024×1024 RGBA WebP |
 | `brand-<vendor>.svg` | 17 | 内联 path、离线自洽（无外链、无脚本） |
 
-> 厂商素材分两档：`deepseek` `qwen` `glm` `kimi` `claude` `gemini` `grok` `gpt` `hunyuan` `minimax` 这 10 个有「厂商 × 岗位」全套图（头像 + 高清）与队长图；`meta` `mistral` `rwkv` `seed` `ernie` `stepfun` `jev` 这 7 个只有厂商通用头像与立绘高清，岗位请求沿 `member-<vendor>-v2.png` 兜底（降级链第 3 跳，不会 404）。
+> 厂商素材分两档：`deepseek` `qwen` `glm` `kimi` `claude` `gemini` `grok` `gpt` `hunyuan` `minimax` 这 10 个有「厂商 × 岗位」全套图（头像 + 高清）与队长图；`meta` `mistral` `rwkv` `seed` `ernie` `stepfun` `jev` 这 7 个只有厂商通用头像与立绘高清，岗位请求沿 `member-<vendor>-v2.png` 兜底 —— 它是**第 2 跳**（[0.5.1](release-notes/v0.5.1.md) 起排在岗位通用图之前；此前是第 3 跳，被岗位图永久挡住，等于永远打不到）。
 
 > ⚠️ **内置目录只认候选链里的名字（带 `-v2`）**：`artworkDir` 里的 `member-qwen-qa.png` 能靠别名回退命中，但包内目录不做这层别名回退。所以导入脚本会统一补 `-v2` —— 手工把不带后缀的文件复制进包，会出现「文件明明在包里，请求却永远落空」。`pnpm verify` 现在逐条断言这 271 张与它们的尺寸、格式（含两族的编码与 alpha）。
 
@@ -207,12 +216,14 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 ```text
 请求 member-qwen-qa-v2.png
   ├─ 1. member-qwen-qa-v2.png     厂商 + 岗位（随包）
-  ├─ 2. member-qa-v2.png          岗位通用
-  ├─ 3. member-qwen-v2.png        厂商通用（随包）
+  ├─ 2. member-qwen-v2.png        厂商通用（随包）
+  ├─ 3. member-qa-v2.png          岗位通用
   └─ 4. 内置鲸鱼素材
 ```
 
-带 `-full` 的请求会额外列出同名的非 full 版本（没画立绘也能点开放大）；随包的高清族是 `.webp`，宿主按扩展名探测到它，所以「列表用小图 + 点开用高清图」共用一条请求名。商标链：`brand-<vendor>.svg → brand-<vendor>.png → brand.svg → brand.png`，全都没有时前端自动换回活动状态图。
+**顺序是 `厂商+岗位 → 厂商 → 岗位`，厂商必须先于岗位**（[0.5.1](release-notes/v0.5.1.md) 修正）。此前顺序反了，而岗位通用图对**每一个**岗位都存在，于是「岗位」那一跳永远抢先命中，「厂商」那一跳成了死代码 —— 只有厂商通用图的 7 家（`meta` / `mistral` / `rwkv` / `seed` / `ernie` / `stepfun` / `jev`）厂商角色永远不可达，17 张厂商立绘也永远轮不到。现场症状就是「徽标已是 StepFun 商标，头像却是通用岗位鲸鱼」。
+
+带 `-full` 的请求会额外列出同名的非 full 版本（没画立绘也能点开放大），同样**厂商立绘优先于岗位头像**；随包的高清族是 `.webp`，宿主按扩展名探测到它，所以「列表用小图 + 点开用高清图」共用一条请求名。商标链：`brand-<vendor>.svg → brand-<vendor>.png → brand.svg → brand.png`，全都没有时前端自动换回活动状态图。
 
 ### 厂商识别规则
 
@@ -220,19 +231,21 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 
 | token | 命中 | token | 命中 |
 |-------|------|-------|------|
-| `deepseek` | deepseek | `gemini` | gemini / gemma / google |
-| `qwen` | qwen / tongyi / 通义 | `grok` | grok / xai / x.ai |
-| `glm` | chatglm / glm / zai / z.ai / 智谱 | `gpt` | gpt / chatgpt / openai / codex |
-| `kimi` | kimi / moonshot | `hunyuan` | hunyuan / 混元 / tencent |
-| `claude` | claude / anthropic | `minimax` | minimax / mini-max / abab |
+| `deepseek` | deepseek | `gemini` | gemini / gemma / palm-\<数字\> / bison / gecko / google / vertex |
+| `qwen` | qwen / tongyi / dashscope / aliyun / 通义 | `grok` | grok / xai / x.ai |
+| `glm` | glm / chatglm / charglm / codegeex / cogview / cogvideo / zai / z.ai / zhipu / bigmodel / 智谱 | `gpt` | gpt / chatgpt / openai / codex |
+| `kimi` | kimi / moonshot | `hunyuan` | hunyuan / hy\<数字\> / 混元 / tencent |
+| `claude` | claude / anthropic | `minimax` | minimax / mini-max / abab / hailuo / speech-\<数字\> |
 | `meta` | meta / llama | `mistral` | mistral\* / mixtral / codestral / devstral |
-| `rwkv` | rwkv | `seed` | seed / doubao / 豆包 / bytedance / volcengine / volces |
-| `ernie` | ern\* / wenxin / 文心 / baidu / qianfan / 千帆 | `stepfun` | stepfun / `step-<数字>` / 阶跃 |
+| `rwkv` | rwkv | `seed` | seed / doubao / 豆包 / bytedance / byteplus / volcengine / volces / skylark |
+| `ernie` | ernie\* / wenxin / 文心 / baidu / qianfan / 千帆 | `stepfun` | stepfun / `step-<数字>` / `step-<字母>` / stepaudio\* / 阶跃 |
 | `jev` | jev / typesafe / type-safe | | |
 
 > **`stepfun` 为什么必须认模型族**：本机三条 Step 路由的 provider 段是 `cn-f/cline/cline-free` 这类（见 [模型配置清单](../模型配置清单.md) 的 S1 / S2 / S3），**没有一个字母是 stepfun**，而 model 是 `step-5-preview`。只按 provider 名匹配会让整队掉兜底头像 —— 与 [0.4.1](release-notes/v0.4.1.md) 修掉的 `hunyuan3` / `rwkv7` / `seed1.6` 是同一类病根（名字后面跟数字时旧规则匹配不上）。
 >
-> 两者都保留词边界：`stepper` / `steps` / `stepstone` / `jevons` / `jevenile` 不会被误吞，有单测钉住。
+> **`step-<字母>` 那一条同样必需**（[0.5.1](release-notes/v0.5.1.md) 补）：阶跃官方公开 ID 里有一大批字母后缀家族（`step-asr` / `step-tts-mini` / `step-r1-v-mini` / `step-video-t2v`），而旧的 `step[-_.]?\d` 要求 step 后跟**数字**，这些全漏命中。现补 `step[-_.][a-z]` 与 `stepaudio[\w.-]*` 两条形态。
+>
+> 三者都保留词边界：`stepper` / `steps` / `stepstone` / `jevons` / `jevenile` 不会被误吞，有单测钉住。
 
 ### 制作流水线（本版美术怎么来的）
 
