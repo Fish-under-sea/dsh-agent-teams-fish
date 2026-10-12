@@ -8,6 +8,10 @@
       "track": "recommended"
     },
     {
+      "version": "0.2.1-alpha.2",
+      "track": "preview"
+    },
+    {
       "version": "0.1.7-rc.2",
       "track": "legacy"
     },

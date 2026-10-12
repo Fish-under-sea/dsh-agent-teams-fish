@@ -16,6 +16,13 @@
 
 ---
 
+> **🆕 [0.6.1](release-notes/v0.6.1.md) (2026-10-12)**: **fixes the whole-row disable on DSH `0.2.1-alpha.2`** — neither `supportedHosts` nor the 21 `@deepseek-ai/dsh-*` peer ranges declared that version, so DSH judged the plugin incompatible and **disabled its profile row** (symptom: the plugin shows as broken and team collaboration does nothing).
+>
+> - **Root cause**: this repository treats `compatibility.json` as the **single source of truth** and requires every peer range to **exactly enumerate** its host versions. The declaration surface simply did not follow the runtime to `0.2.1-alpha.2` — **the plugin code itself is not defective** (its compiled output value-imports only `dsh-llm` and `schemastery`, both of which still export on the new host).
+> - **Fix**: add `0.2.1-alpha.2` to `supportedHosts` with `track: preview`, then append it to all **21** peer ranges (the `scripts/compatibility.mjs` gate forces this step: skip it and the check goes red). `recommendedHost` **stays** on the stable `0.2.0-rc.2` — an alpha must not be the ordinary-user recommendation.
+> - **Why not a wide range**: DSH compares with `includePrerelease`, so `>=0.2.0-rc.2` would claim compatibility with **every future** version, which contradicts this repository's stance of declaring a host only after testing it.
+>
+> **🆕 [0.6.0](release-notes/v0.6.0.md) (2026-10-11)**: merges **upstream v0.1.23** (member tool policies / quality-gate contract and amendment binding / lineage identity across forks / session source metadata and recovery utility / workspace audit / degraded handling of a corrupt `team.json` / card id-matching regression fix), while **fully preserving** Fish's vendor art system and captain-avatar route following.
 > **🆕 [0.6.0](release-notes/v0.6.0.md) (2026-10-11)**: merges **upstream v0.1.23** (member tool policies / quality-gate contract and amendment binding / lineage identity across forks / session source metadata and recovery utility / workspace audit / degraded handling of a corrupt `team.json` / card id-matching regression fix), while **fully preserving** Fish's vendor art system and captain-avatar route following.
 >
 > - **Baseline advanced**: upstream tag `v0.1.22` (`9cba4fe`) → **`v0.1.23`** (`1094b84`), bringing in 37 upstream commits and four new modules (`tool-policies` / `workspace-audit` / `lineage` / `artifacts`) at once.
@@ -124,7 +131,7 @@ You can also add it manually to `profiles/<profile>/package.json`:
 
 ```jsonc
 "dependencies": {
-  "dsh-agent-teams-fish": "^0.6.0"
+  "dsh-agent-teams-fish": "^0.6.1"
 }
 ```
 

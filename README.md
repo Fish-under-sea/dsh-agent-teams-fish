@@ -16,6 +16,13 @@
 
 ---
 
+> **🆕 [0.6.1](release-notes/v0.6.1.md)（2026-10-12）**：**修复在 DSH `0.2.1-alpha.2` 上被整行禁用的问题** —— `supportedHosts` 与全部 21 条 `@deepseek-ai/dsh-*` peer 白名单此前未收录该版本，DSH 判定不兼容并**自动停用插件行**（症状：插件显示「异常」、团队协作毫无反应）。
+>
+> - **根因**：本仓库以 `compatibility.json` 为**单一事实源**，并强制每条 peer 范围**精确枚举**其中的宿主版本。DSH 运行时升到 `0.2.1-alpha.2` 后声明面没跟上 —— **插件代码本身无缺陷**（运行时只 value-import `dsh-llm` 与 `schemastery`，两者在新宿主上照常导出）。
+> - **修法**：把 `0.2.1-alpha.2` 以 `track: preview` 加入 `supportedHosts`，并同步追加到 **21** 条 peer 白名单（`scripts/compatibility.mjs` 门禁会强制这一步：漏改即红）。`recommendedHost` **仍是**稳定版 `0.2.0-rc.2` —— alpha 不得充当普通用户推荐目标。
+> - **为何不写宽范围**：DSH 用 `includePrerelease` 语义比较，`>=0.2.0-rc.2` 会宣称「与所有未来版本兼容」，与本仓库「逐版本实测后再声明」的立场相悖。
+>
+> **🆕 [0.6.0](release-notes/v0.6.0.md)（2026-10-11）**：合并**上游 v0.1.23**（成员工具策略 / 质量门契约与修订绑定 / lineage 身份沿 fork 链 / 会话源元数据与恢复工具 / 工作区审计 / 损坏 `team.json` 降级 / 卡片 id 匹配回归修复），同时**完整保留** Fish 的厂商美术系统与队长头像跟随路由。
 > **🆕 [0.6.0](release-notes/v0.6.0.md)（2026-10-11）**：合并**上游 v0.1.23**（成员工具策略 / 质量门契约与修订绑定 / lineage 身份沿 fork 链 / 会话源元数据与恢复工具 / 工作区审计 / 损坏 `team.json` 降级 / 卡片 id 匹配回归修复），同时**完整保留** Fish 的厂商美术系统与队长头像跟随路由。
 >
 > - **基线推进**：上游 tag `v0.1.22`（`9cba4fe`）→ **`v0.1.23`**（`1094b84`），一次带入上游 37 个提交与 4 个新模块（`tool-policies` / `workspace-audit` / `lineage` / `artifacts`）。
@@ -138,7 +145,7 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 
 ```jsonc
 "dependencies": {
-  "dsh-agent-teams-fish": "^0.6.0"
+  "dsh-agent-teams-fish": "^0.6.1"
 }
 ```
 
