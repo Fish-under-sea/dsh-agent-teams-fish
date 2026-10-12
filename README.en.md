@@ -16,6 +16,14 @@
 
 ---
 
+> **🆕 [0.7.0](release-notes/v0.7.0.md) (2026-10-12)**: vendor namespace **17 → 18**, adding **MiMo (Xiaomi MiMo)**.
+>
+> - **Tier**: the same tier as `meta` / `mistral` / `rwkv` / `seed` / `ernie` / `stepfun` / `jev` — a vendor-generic portrait plus an HD one, **no role art**. A member request for `member-mimo-<role>-v2.png` misses hop 1 and lands on **the vendor's own character at hop 2** (the chain has been `vendor+role → vendor → role` since [0.5.1](release-notes/v0.5.1.md)), so avatars render normally.
+> - **Recognition**: `mimo` / `mimo-*` (`mimo-v2` / `MiMo-7B` / `mimo-vl`) / `xiaomi` / 小米. **Boundaries are the hard part here**: `mimo` shares the `mi` prefix with `minimax` and `mistral`, so relaxing to a bare `\bmi[\w.-]*` would swallow both vendors wholesale; yet a loose `\bmimo[\w.-]*` would swallow ordinary words such as `mimosa` / `mimolette`. The rule therefore requires a word boundary or a separator after `mimo` — real MiMo model ids always carry a separator, so tightening loses no real id. Both directions are pinned by unit tests.
+> - **Assets**: 3 new files (a 256×256 RGBA avatar, an alpha WebP HD portrait and a brand SVG); the asset directory goes **286 → 289 files**. The portrait was checked corner by corner to keep its transparent background (all four corners read `(0,0,0,0)`), consistent with the existing vendor art.
+> - ⚠️ **`brand-mimo.svg` is a self-made simplified monogram**: the gate requires a brand file per vendor, so a minimal Mi monogram (Xiaomi-orange rounded square with a white `mi`) was drawn under the existing normalization contract. It is **not an official mark**; replace the file once official art exists.
+> - **Why minor**: `ARTWORK_VENDORS.length` is a gate-asserted contract value (17 was hard-coded), so moving it to 18 is a behaviour change, not a patch.
+>
 > **🆕 [0.6.1](release-notes/v0.6.1.md) (2026-10-12)**: **fixes the whole-row disable on DSH `0.2.1-alpha.2`** — neither `supportedHosts` nor the 21 `@deepseek-ai/dsh-*` peer ranges declared that version, so DSH judged the plugin incompatible and **disabled its profile row** (symptom: the plugin shows as broken and team collaboration does nothing).
 >
 > - **Root cause**: this repository treats `compatibility.json` as the **single source of truth** and requires every peer range to **exactly enumerate** its host versions. The declaration surface simply did not follow the runtime to `0.2.1-alpha.2` — **the plugin code itself is not defective** (its compiled output value-imports only `dsh-llm` and `schemastery`, both of which still export on the new host).
@@ -46,7 +54,7 @@
 > - ⚠️ **`brand-jev.svg` is a placeholder monogram, not an official mark**: TypeSafe / Jev has no public logo (neither simple-icons nor LobeHub icons carries one), so a minimal "J" mark was drawn under the existing normalization contract. **Replace that file once an official mark exists** — the name and size contract stay the same.
 
 ---
-Seventeen vendors × ten role avatars and seventeen vendor brand marks **ship inside the package** — they work out of the box; swapping the entire art style is still just one custom directory away, with zero changes to animation code.
+Eighteen vendors × ten role avatars and eighteen vendor brand marks **ship inside the package** — they work out of the box; swapping the entire art style is still just one custom directory away, with zero changes to animation code.
 
 ## Table of Contents
 
@@ -131,7 +139,7 @@ You can also add it manually to `profiles/<profile>/package.json`:
 
 ```jsonc
 "dependencies": {
-  "dsh-agent-teams-fish": "^0.6.1"
+  "dsh-agent-teams-fish": "^0.7.0"
 }
 ```
 
@@ -206,21 +214,21 @@ Enable the plugin in `profiles/<profile>/cordis.patch.yml`. Vendor assets alread
 
 ### Packaged Assets (since [0.3.1](release-notes/v0.3.1.md); vendor assets refreshed on 2026-10-08 with HD family added)
 
-`assets/agent-teams/` contains **286 files / ~29.3 MB**: 15 built-in whale baselines (captain / 8 roles / 6 actions) + **271 vendor assets**.
+`assets/agent-teams/` contains **289 files / ~29.7 MB**: 15 built-in whale baselines (captain / 8 roles / 6 actions) + **274 vendor assets**.
 
 | Family | Count | Spec |
 |--------|:-----:|------|
 | `member-<vendor>-<role>-v2.png` | 10 × 10 = 100 | 256×256 8-bit RGBA |
 | `member-<vendor>-<role>-full-v2.webp` | 10 × 10 = 100 | 1024×1024 RGBA WebP |
-| `member-<vendor>-v2.png` | 15 | 256×256 8-bit RGBA |
-| `member-<vendor>-full-v2.webp` | 15 | Portrait, long edge 1897–2048 |
+| `member-<vendor>-v2.png` | 18 | 256×256 8-bit RGBA |
+| `member-<vendor>-full-v2.webp` | 18 | Portrait, long edge 1897–2048 |
 | `team-lead-<vendor>-v2.png` | 10 | 256×256 8-bit RGBA |
 | `team-lead-<vendor>-full-v2.webp` | 10 | 1024×1024 RGBA WebP |
-| `brand-<vendor>.svg` | 15 | Inline path, fully offline (no external links, no scripts) |
+| `brand-<vendor>.svg` | 18 | Inline path, fully offline (no external links, no scripts) |
 
-> Vendor assets come in two tiers: `deepseek` `qwen` `glm` `kimi` `claude` `gemini` `grok` `gpt` `hunyuan` `minimax` — these 10 have full "vendor × role" sets (avatars + HD) and captain art; `meta` `mistral` `rwkv` `seed` `ernie` `stepfun` `jev` have only vendor-generic avatars and HD portraits — role requests resolve to `member-<vendor>-v2.png` (now the **2nd** hop, ahead of the role-generic image, since [0.5.1](release-notes/v0.5.1.md); it used to be the 3rd hop and was therefore never reachable).
+> Vendor assets come in two tiers: `deepseek` `qwen` `glm` `kimi` `claude` `gemini` `grok` `gpt` `hunyuan` `minimax` — these 10 have full "vendor × role" sets (avatars + HD) and captain art; `meta` `mistral` `rwkv` `seed` `ernie` `stepfun` `jev` `mimo` have only vendor-generic avatars and HD portraits — role requests resolve to `member-<vendor>-v2.png` (now the **2nd** hop, ahead of the role-generic image, since [0.5.1](release-notes/v0.5.1.md); it used to be the 3rd hop and was therefore never reachable).
 
-> ⚠️ **The packaged directory only recognizes names in the candidate chain (with `-v2`)**: `member-qwen-qa.png` in `artworkDir` can hit via alias fallback, but the packaged directory does not perform this alias fallback. The import script uniformly adds `-v2` — manually copying files without the suffix into the package causes "the file is clearly there, but the request always misses." `pnpm verify` now asserts all 271 files with their dimensions and formats (including encoding and alpha for both families).
+> ⚠️ **The packaged directory only recognizes names in the candidate chain (with `-v2`)**: `member-qwen-qa.png` in `artworkDir` can hit via alias fallback, but the packaged directory does not perform this alias fallback. The import script uniformly adds `-v2` — manually copying files without the suffix into the package causes "the file is clearly there, but the request always misses." `pnpm verify` now asserts all 274 files with their dimensions and formats (including encoding and alpha for both families).
 
 ### Degradation Chain (no broken images)
 
@@ -250,7 +258,7 @@ Lowercase regex matching against `provider + model` concatenated:
 | `meta` | meta / llama | `mistral` | mistral\* / mixtral / codestral / devstral |
 | `rwkv` | rwkv | `seed` | seed / doubao / 豆包 / bytedance / byteplus / volcengine / volces / skylark |
 | `ernie` | ernie\* / wenxin / 文心 / baidu / qianfan / 千帆 | `stepfun` | stepfun / `step-<digit>` / `step-<letter>` / stepaudio\* / 阶跃 |
-| `jev` | jev / typesafe / type-safe | | |
+| `jev` | jev / typesafe / type-safe | `mimo` | mimo / mimo-\<suffix\> / xiaomi / 小米 |
 
 > **Why `stepfun` must match model families**: this machine's three Step routes have provider segments like `cn-f/cline/cline-free`, which contain **not a single letter of "stepfun"**, while the model is `step-5-preview`. Matching the provider name alone drops the whole team to fallback art — the same class of defect fixed for `hunyuan3` / `rwkv7` / `seed1.6` in [0.4.1](release-notes/v0.4.1.md).
 >

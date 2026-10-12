@@ -16,6 +16,14 @@
 
 ---
 
+> **🆕 [0.7.0](release-notes/v0.7.0.md)（2026-10-12）**：厂商命名空间 **17 → 18**，新增 **MiMo（小米 MiMo）**。
+>
+> - **档位**：与 `meta` / `mistral` / `rwkv` / `seed` / `ernie` / `stepfun` / `jev` 同档 —— 只有「厂商通用图 + 立绘高清」，**没有 Q 版岗位图**。成员请求 `member-mimo-<role>-v2.png` 时第 1 跳落空，**第 2 跳命中自家厂商角色**（链序自 [0.5.1](release-notes/v0.5.1.md) 起为 `vendor+role → vendor → role`），头像照常显示、不破图。
+> - **识别规则**：`mimo` / `mimo-*`（`mimo-v2` / `MiMo-7B` / `mimo-vl`）/ `xiaomi` / 小米。**边界是这条规则的主要难点**：`mimo` 与 `minimax` / `mistral` 同以 `mi` 开头，放宽成裸 `\bmi[\w.-]*` 会把这两家整片吞掉；而宽松的 `\bmimo[\w.-]*` 又会误吞 `mimosa` / `mimolette` 这类普通英文词。规则因此要求 `mimo` 后**是词边界或分隔符** —— MiMo 的真实 ID 一律带分隔符，收紧不会漏掉真实 ID。正反两组边界都有单测钉住。
+> - **素材**：新增 3 个文件（256×256 RGBA 头像 + alpha WebP 立绘高清 + 商标 SVG），素材目录 **286 → 289 个文件**。立绘经逐角点核验保留透明背景（四角 RGBA 均为 `(0,0,0,0)`），与既有厂商素材一致。
+> - ⚠️ **`brand-mimo.svg` 是自制简版字标**：仓库门禁强制每个厂商都必须有商标文件，本版按既有归一化口径自制了一个简版 Mi 字标（小米橙圆角方底 + 白色 `mi`），**不是官方商标**。拿到官方素材后替换同名文件即可。
+> - **为什么走 minor**：`ARTWORK_VENDORS.length` 是仓库门禁硬断言的契约值（17 是写死的），改成 18 属行为变更，不是补丁。
+>
 > **🆕 [0.6.1](release-notes/v0.6.1.md)（2026-10-12）**：**修复在 DSH `0.2.1-alpha.2` 上被整行禁用的问题** —— `supportedHosts` 与全部 21 条 `@deepseek-ai/dsh-*` peer 白名单此前未收录该版本，DSH 判定不兼容并**自动停用插件行**（症状：插件显示「异常」、团队协作毫无反应）。
 >
 > - **根因**：本仓库以 `compatibility.json` 为**单一事实源**，并强制每条 peer 范围**精确枚举**其中的宿主版本。DSH 运行时升到 `0.2.1-alpha.2` 后声明面没跟上 —— **插件代码本身无缺陷**（运行时只 value-import `dsh-llm` 与 `schemastery`，两者在新宿主上照常导出）。
@@ -48,7 +56,7 @@
 
 ---
 
-十七个厂商 × 十个岗位的头像、十七个厂商商标徽标**随包自带** —— 装上就有；想换画风仍是一个自定义目录的事，不改一行动画代码。
+十八个厂商 × 十个岗位的头像、十八个厂商商标徽标**随包自带** —— 装上就有；想换画风仍是一个自定义目录的事，不改一行动画代码。
 
 ## 目录
 
@@ -145,7 +153,7 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 
 ```jsonc
 "dependencies": {
-  "dsh-agent-teams-fish": "^0.6.1"
+  "dsh-agent-teams-fish": "^0.7.0"
 }
 ```
 
@@ -181,7 +189,7 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
       config:
         stateDir: .agent-teams
         memberProvider: spawn
-        # 可选：一个目录即可整套覆盖随包素材（不配就用包内 17 厂商素材）
+        # 可选：一个目录即可整套覆盖随包素材（不配就用包内 18 厂商素材）
         artworkDir: <你的美术目录绝对路径>
         # 上游 v0.1.23 新增：成员默认模型 / 子代理深度上限 / 成员数上限 / 成员工具策略
         memberModel: deepseek-v4
@@ -247,21 +255,21 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 
 ### 随包素材（[0.3.1](release-notes/v0.3.1.md) 起；厂商素材于 2026-10-08 换成新一批并加入高清族）
 
-`assets/agent-teams/` 共 **286 个文件 / 约 29.3 MB**：15 张内置鲸鱼基线（队长 / 8 岗位 / 6 动作）+ **271 张厂商素材**。
+`assets/agent-teams/` 共 **289 个文件 / 约 29.7 MB**：15 张内置鲸鱼基线（队长 / 8 岗位 / 6 动作）+ **274 张厂商素材**。
 
 | 族 | 数量 | 规格 |
 |----|:---:|------|
 | `member-<vendor>-<role>-v2.png` | 10 × 10 = 100 | 256×256 8-bit RGBA |
 | `member-<vendor>-<role>-full-v2.webp` | 10 × 10 = 100 | 1024×1024 RGBA WebP |
-| `member-<vendor>-v2.png` | 17 | 256×256 8-bit RGBA |
-| `member-<vendor>-full-v2.webp` | 17 | 竖幅，长边 1897–2048 |
+| `member-<vendor>-v2.png` | 18 | 256×256 8-bit RGBA |
+| `member-<vendor>-full-v2.webp` | 18 | 竖幅，长边 1897–2048 |
 | `team-lead-<vendor>-v2.png` | 10 | 256×256 8-bit RGBA |
 | `team-lead-<vendor>-full-v2.webp` | 10 | 1024×1024 RGBA WebP |
-| `brand-<vendor>.svg` | 17 | 内联 path、离线自洽（无外链、无脚本） |
+| `brand-<vendor>.svg` | 18 | 内联 path、离线自洽（无外链、无脚本） |
 
-> 厂商素材分两档：`deepseek` `qwen` `glm` `kimi` `claude` `gemini` `grok` `gpt` `hunyuan` `minimax` 这 10 个有「厂商 × 岗位」全套图（头像 + 高清）与队长图；`meta` `mistral` `rwkv` `seed` `ernie` `stepfun` `jev` 这 7 个只有厂商通用头像与立绘高清，岗位请求沿 `member-<vendor>-v2.png` 兜底 —— 它是**第 2 跳**（[0.5.1](release-notes/v0.5.1.md) 起排在岗位通用图之前；此前是第 3 跳，被岗位图永久挡住，等于永远打不到）。
+> 厂商素材分两档：`deepseek` `qwen` `glm` `kimi` `claude` `gemini` `grok` `gpt` `hunyuan` `minimax` 这 10 个有「厂商 × 岗位」全套图（头像 + 高清）与队长图；`meta` `mistral` `rwkv` `seed` `ernie` `stepfun` `jev` `mimo` 这 8 个只有厂商通用头像与立绘高清，岗位请求沿 `member-<vendor>-v2.png` 兜底 —— 它是**第 2 跳**（[0.5.1](release-notes/v0.5.1.md) 起排在岗位通用图之前；此前是第 3 跳，被岗位图永久挡住，等于永远打不到）。
 
-> ⚠️ **内置目录只认候选链里的名字（带 `-v2`）**：`artworkDir` 里的 `member-qwen-qa.png` 能靠别名回退命中，但包内目录不做这层别名回退。所以导入脚本会统一补 `-v2` —— 手工把不带后缀的文件复制进包，会出现「文件明明在包里，请求却永远落空」。`pnpm verify` 现在逐条断言这 271 张与它们的尺寸、格式（含两族的编码与 alpha）。
+> ⚠️ **内置目录只认候选链里的名字（带 `-v2`）**：`artworkDir` 里的 `member-qwen-qa.png` 能靠别名回退命中，但包内目录不做这层别名回退。所以导入脚本会统一补 `-v2` —— 手工把不带后缀的文件复制进包，会出现「文件明明在包里，请求却永远落空」。`pnpm verify` 现在逐条断言这 274 张与它们的尺寸、格式（含两族的编码与 alpha）。
 
 ### 降级链（不会出现破图）
 
@@ -291,7 +299,7 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 | `meta` | meta / llama | `mistral` | mistral\* / mixtral / codestral / devstral |
 | `rwkv` | rwkv | `seed` | seed / doubao / 豆包 / bytedance / byteplus / volcengine / volces / skylark |
 | `ernie` | ernie\* / wenxin / 文心 / baidu / qianfan / 千帆 | `stepfun` | stepfun / `step-<数字>` / `step-<字母>` / stepaudio\* / 阶跃 |
-| `jev` | jev / typesafe / type-safe | | |
+| `jev` | jev / typesafe / type-safe | `mimo` | mimo / mimo-\<后缀\> / xiaomi / 小米 |
 
 > **`stepfun` 为什么必须认模型族**：本机三条 Step 路由的 provider 段是 `cn-f/cline/cline-free` 这类（见 [模型配置清单](../模型配置清单.md) 的 S1 / S2 / S3），**没有一个字母是 stepfun**，而 model 是 `step-5-preview`。只按 provider 名匹配会让整队掉兜底头像 —— 与 [0.4.1](release-notes/v0.4.1.md) 修掉的 `hunyuan3` / `rwkv7` / `seed1.6` 是同一类病根（名字后面跟数字时旧规则匹配不上）。
 >

@@ -317,7 +317,7 @@ const artworkDir = new URL('../assets/agent-teams/', import.meta.url)
 // 2026-10-08：厂商命名空间扩到 15 个、audio/video 两桶出图，所以这条门禁的
 // 厂商与岗位枚举各收敛成一份，跟着 ARTWORK_VENDORS / ARTWORK_ROLES 一起改。
 // 2026-10-11：第三轮素材再扩到 17 个（新增 stepfun / jev）。
-const ARTWORK_VENDOR_ALT = 'deepseek|qwen|glm|kimi|claude|gemini|grok|gpt|hunyuan|minimax|meta|mistral|rwkv|seed|ernie|stepfun|jev'
+const ARTWORK_VENDOR_ALT = 'deepseek|qwen|glm|kimi|claude|gemini|grok|gpt|hunyuan|minimax|meta|mistral|rwkv|seed|ernie|stepfun|jev|mimo'
 const ARTWORK_ROLE_ALT = 'engineer|qa|security|researcher|designer|docs|data|operator|audio|video'
 const packagedArtwork = (await readdir(artworkDir)).sort()
 const packagedArtworkSet = new Set(packagedArtwork)
@@ -393,7 +393,7 @@ const canonicalRoster = [
 // 厂商通用图与 512 立绘。两档合起来必须恰好等于 ARTWORK_VENDORS，多一个少一个都失败。
 // 2026-10-11：第三轮素材新增 stepfun / jev，两个都落在「只有通用图与立绘」那一档。
 const ROLE_ART_VENDORS = ['deepseek', 'qwen', 'glm', 'kimi', 'claude', 'gemini', 'grok', 'gpt', 'hunyuan', 'minimax']
-const GENERIC_ONLY_VENDORS = ['meta', 'mistral', 'rwkv', 'seed', 'ernie', 'stepfun', 'jev']
+const GENERIC_ONLY_VENDORS = ['meta', 'mistral', 'rwkv', 'seed', 'ernie', 'stepfun', 'jev', 'mimo']
 // 角色表自 0.1.27 起分两半：上面 8 个「八人名单」岗位，以及 audio / video —— 它们
 // 不在名单里，但同样登记在 ARTWORK_ROLES 且自 2026-10-08 起有整套厂商图。
 const EXTRA_ROLES = ['audio', 'video']
@@ -416,7 +416,7 @@ check(
     && canonicalRoster.every(([name, role]) => memberRoleSlug(name, role) !== null
       && artworkReachesPackage(memberArtUrl(name, role))
       && artworkReachesPackage(memberArtUrl(name, role, 'deepseek')))
-    && ARTWORK_VENDORS.length === 17
+    && ARTWORK_VENDORS.length === 18
     && [...ROLE_ART_VENDORS, ...GENERIC_ONLY_VENDORS].sort().join('|')
       === [...ARTWORK_VENDORS].sort().join('|')
     && ARTWORK_VENDORS.every(vendor => vendorSlug({ model: vendor }) === vendor

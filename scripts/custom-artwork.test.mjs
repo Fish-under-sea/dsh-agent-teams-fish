@@ -39,8 +39,8 @@ test('every packaged slug stays servable exactly as shipped', () => {
   }
 })
 
-test('vendor namespaces cover the 17 vendors and 10 roles', () => {
-  assert.equal(ARTWORK_VENDORS.length, 17)
+test('vendor namespaces cover the 18 vendors and 10 roles', () => {
+  assert.equal(ARTWORK_VENDORS.length, 18)
   assert.equal(ARTWORK_ROLES.length, 10)
   assert.ok(ARTWORK_VENDORS.includes('deepseek'))
   assert.ok(ARTWORK_VENDORS.includes('hunyuan'))
@@ -54,6 +54,8 @@ test('vendor namespaces cover the 17 vendors and 10 roles', () => {
   for (const vendor of ['stepfun', 'jev']) {
     assert.ok(ARTWORK_VENDORS.includes(vendor), `${vendor} 必须在厂商表里`)
   }
+  // 2026-10-12：新增 mimo（小米 MiMo），同样只有厂商通用图与立绘。
+  assert.ok(ARTWORK_VENDORS.includes('mimo'), 'mimo 必须在厂商表里')
   assert.ok(ARTWORK_ROLES.includes('operator'))
   // 2026-10-05 登记、2026-10-08 出图：audio / video 已有 10 个厂商的岗位图。
   assert.ok(ARTWORK_ROLES.includes('audio'))
@@ -107,7 +109,7 @@ test('a vendor+role request degrades to the vendor character, then the role', ()
 
 test('a generic-only vendor reaches its own character on the second hop', () => {
   // 只有通用图的厂商：第 1 跳落空后必须命中自家角色，而不是掉回岗位通用鲸鱼。
-  for (const vendor of ['meta', 'mistral', 'rwkv', 'seed', 'ernie', 'stepfun', 'jev']) {
+  for (const vendor of ['meta', 'mistral', 'rwkv', 'seed', 'ernie', 'stepfun', 'jev', 'mimo']) {
     assert.deepEqual(artworkCandidates(`member-${vendor}-qa-v2.png`), [
       `member-${vendor}-qa-v2.png`,
       `member-${vendor}-v2.png`,

@@ -110,6 +110,11 @@ const VENDOR_CASES = [
   { provider: 'typesafe', model: 'jev-router', expected: 'jev' },
   { provider: 'type-safe', model: 'system-one', expected: 'jev' },
   { provider: 'cline', model: 'jev', expected: 'jev' },
+  // 2026-10-12：新增 mimo（小米 MiMo），命名空间 17 → 18。
+  { provider: 'mimo', model: 'mimo-v2', expected: 'mimo' },
+  { provider: 'xiaomi', model: 'MiMo-7B', expected: 'mimo' },
+  { provider: 'cn-f/our-free-model', model: 'mimo-v2-free', expected: 'mimo' },
+  { provider: 'unknown', model: '小米MiMo', expected: 'mimo' },
 ]
 
 test('8 个成员岗位正例命中正确 role token', () => {
@@ -212,6 +217,34 @@ test('stepfun：字母后缀家族也必须命中（step-asr / step-tts-mini / s
   }
   // 仍然不能吞普通英文词：step 后面直接跟字母的不认
   for (const model of ['stepper', 'steps', 'stepstone', 'footsteps', 'stepper-motor', 'javascript-steps']) {
+    assert.equal(vendorSlug({ provider: 'some', model }), undefined, `${model} 不应被误识别`)
+  }
+})
+
+/**
+ * 2026-10-12 新增厂商 mimo（小米 MiMo）的识别边界。
+ *
+ * 风险点：`mimo` 与 `minimax` / `mistral` 同以 `mi` 开头，若放宽成裸
+ * `\bmi[\w.-]*` 就会把这两家吞掉；而若写成 `\bmimo[\w.-]*`，又会吞掉
+ * `mimosa` / `mimolette` 这类真实英文词。所以规则要求 `mimo` 后是词边界或
+ * 分隔符。本测试把两侧边界都钉住。
+ */
+test('mimo：三种口径命中，且不误吞 minimax / mistral / mimosa', () => {
+  assert.equal(vendorSlug({ provider: 'mimo', model: 'any' }), 'mimo')
+  assert.equal(vendorSlug({ provider: 'xiaomi', model: 'any' }), 'mimo')
+  for (const model of ['mimo-v2', 'MiMo-7B', 'mimo-vl', 'mimo-v2.5', 'mimo_7b', 'MiMo']) {
+    assert.equal(vendorSlug({ provider: 'unknown', model }), 'mimo', `${model} 应命中 mimo`)
+  }
+  assert.equal(vendorSlug({ provider: 'unknown', model: '小米' }), 'mimo')
+  // 反向：相邻厂商不得被吞
+  for (const model of ['minimax-m2', 'mini-max-01', 'abab6.5s', 'hailuo-02', 'speech-2.5']) {
+    assert.equal(vendorSlug({ provider: 'cn-f', model }), 'minimax', `${model} 仍应命中 minimax`)
+  }
+  for (const model of ['mistral-large', 'ministral-8b', 'mixtral-8x7b']) {
+    assert.equal(vendorSlug({ provider: 'cn-f', model }), 'mistral', `${model} 仍应命中 mistral`)
+  }
+  // 反向：普通英文词不得被误识别（收紧规则的理由）
+  for (const model of ['mimic', 'mimosa', 'mimolette', 'microsoft-phi', 'micro']) {
     assert.equal(vendorSlug({ provider: 'some', model }), undefined, `${model} 不应被误识别`)
   }
 })
