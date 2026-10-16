@@ -16,6 +16,14 @@
 
 ---
 
+> **[0.7.2](release-notes/v0.7.2.md)（2026-10-17）**：修复 DSH `0.2.1-alpha.2` 上「计划已批准、任务却始终无法派发」的问题。
+>
+> - **根因**：新版宿主以 `startActivation` 取代 `startContinuable`，旧委派守卫却给不存在的方法套上包装，最终抛出 `Cannot read properties of undefined (reading 'call')`。此前仅补齐宿主版本白名单，未覆盖这条真实启动路径。
+> - **修复**：按宿主实际能力选择启动接口；新版明确使用 `delivery: 'parent'`，保留持久成员、父会话通知及冷恢复语义。委派守卫只包装真实存在的方法，并覆盖新版入口；停止、重派和归档统一适配 `drainChildren`，旧宿主仍走原接口。
+> - **权限边界不变**：成员工具限制、委派深度预算、已退出成员与停机状态的准入检查继续生效；热重载后恢复原方法，不伪造旧 API。
+> - **模型选择**：成员最终路由和备用路由必须属于当前会话捕获的子代理模型白名单。即使省略模型参数，也不会继承白名单外的队长模型；越界时在创建子会话前明确拒绝，不擅自切换模型。无此策略的旧宿主保持原有选择行为。
+> - **回归与实测**：新增仅有新版 API 的启动用例、委派守卫与热重载回归、会话模型策略及真实 Cordis 可选服务读取回归，以及 `--activation-harness` 生命周期矩阵。本机 DSH `0.2.1-alpha.2` 已实际完成建队审批、成员领取、32/32 测试、回报和归档；原始请求头确认使用预选 Qwen 路由与 `low` 推理档位。升级后需重启 DSH；无需迁移团队记录。
+>
 > **🆕 [0.7.1](release-notes/v0.7.1.md)（2026-10-16）**：**修复「可选字段填空串就建不起团队」** —— 内联计划的 `tool_policy` / `provider` / `model` / `reasoning_effort` / `role` 填 `""` 或纯空白时，不再报 `must not be empty`，改按**未提供**处理。
 >
 > - **症状**：某会话 `agent_teams_create` 连续失败 **34 次、0 次成功**，另一个 **14 次、0 次成功**，代理一个都没启动；报错在 `profiles.inline-plan.members[0].tool_policy must not be empty` 与 `unknown tool policy "default"` 之间反复。
@@ -162,7 +170,7 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 
 ```jsonc
 "dependencies": {
-  "dsh-agent-teams-fish": "^0.7.1"
+  "dsh-agent-teams-fish": "^0.7.2"
 }
 ```
 

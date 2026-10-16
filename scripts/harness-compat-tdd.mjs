@@ -8,9 +8,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { SubagentRuntime } from '@deepseek-ai/dsh-subagent'
+import * as compat from '../lib/harness-compat.js'
 import { guardSubagentDelivery, installContinuableMemberSetup, memberToolFilter, queueMemberPrompt, restrictableToolNames, sessionOwnEvents } from '../lib/harness-compat.js'
-import { installMemberSelectionRuntime, spawnMember } from '../lib/members.js'
-import { createTeamDir } from '../lib/state.js'
+import { installMemberDelegationGuard, installMemberSelectionRuntime, resolveMemberLlmSelection, spawnMember } from '../lib/members.js'
+import { createTeamDir, writeTeam } from '../lib/state.js'
 import { CAPTAIN_TOOL_NAMES } from '../lib/tool-names.js'
 
 const queueKey = Symbol.for('dsh.subagent.queuePrompt')
@@ -387,4 +388,222 @@ await test('serial initialization failure vetoes creation instead of admitting a
   installContinuableMemberSetup(ctx, () => { throw new Error('damaged durable model route') })
   assert.throws(() => ctx.emit('agent/created', { agent: child(), source: 'resume' }), /damaged durable model route/)
   ctx.dispose()
+})
+
+await test('activation-only host starts a durable member without inventing legacy methods', async () => {
+  let received
+  const runtime = {
+    getProvider: () => ({ prepareContinuable() {}, capabilities: { persona: true, toolFilter: true } }),
+    async startActivation(spec) {
+      assert.equal(this, runtime)
+      received = spec
+      assert.equal(spec.delivery, 'parent', 'durable children retain parent-owned lifecycle and persistence')
+      return { childId: 'activation-child', messageId: 'accepted', result: Promise.resolve({}), dispose: async () => {} }
+    },
+  }
+  const captain = { id: 'captain', session: { header: {}, ownEvents: () => [] } }
+  const ctx = scope({ subagents: runtime })
+  installMemberDelegationGuard(ctx, '.agent-teams', 0)
+  const team = { id: 'team', name: 'Team', captainSessionId: captain.id, members: [], tasks: [], createdAt: 1, taskSeq: 0 }
+  const member = { id: '', name: 'worker', role: 'engineer', joinedAt: 1, status: 'idle' }
+  try {
+    await spawnMember(ctx, { provider: 'spawn', maxDepth: 0 }, { withPending: (_p, _l, _s, run) => run() },
+      { provider: 'chosen', model: 'model', reasoningEffort: 'high' }, captain, team, member, '.agent-teams', signal)
+    assert.equal(member.id, 'activation-child')
+    assert.equal(received.provider, 'spawn')
+    assert.equal(received.signal, signal)
+    assert.equal(received.request.parent, captain)
+    assert.equal(received.label, 'agent-teams:team:worker')
+    assert.deepEqual(received.request.agentOptions, { provider: 'chosen', model: 'model', reasoningEffort: 'high' })
+    assert.match(received.request.persona, /engineer/)
+    assert.ok(received.request.toolFilter.deny.includes('agent_teams_create'))
+    assert.ok(received.request.toolFilter.deny.includes('send_message'))
+    assert.equal(typeof runtime.start, 'undefined')
+    assert.equal(typeof runtime.startContinuable, 'undefined')
+  } finally { ctx.dispose() }
+})
+
+await test('activation creation guard rejects retired members and restores prototype methods after HMR', async () => {
+  let calls = 0
+  const prototype = { async startActivation(spec) { assert.equal(this, runtime); calls++; return spec } }
+  const runtime = Object.create(prototype)
+  const first = scope({ subagents: runtime })
+  const second = scope({ subagents: runtime })
+  const retired = child()
+  const captain = { session: { header: {}, ownEvents: () => [] } }
+  const before = Object.getOwnPropertyDescriptor(runtime, 'startActivation')
+  installMemberDelegationGuard(first, '.agent-teams', 0)
+  installMemberDelegationGuard(second, '.agent-teams', 0)
+  try {
+    await assert.rejects(runtime.startActivation({ request: { parent: retired } }), /no longer admitting delegated work/)
+    assert.equal(calls, 0)
+    first.dispose()
+    await assert.rejects(runtime.startActivation({ request: { parent: retired } }), /no longer admitting delegated work/)
+    await runtime.startActivation({ request: { parent: captain } })
+    assert.equal(calls, 1)
+  } finally { second.dispose(); first.dispose() }
+  await runtime.startActivation({ request: { parent: retired } })
+  assert.equal(calls, 2, 'disposed nested wrappers must become inert')
+  const clean = scope({ subagents: runtime })
+  const original = Object.getOwnPropertyDescriptor(runtime, 'startActivation')
+  installMemberDelegationGuard(clean, '.agent-teams', 0)
+  clean.dispose()
+  assert.deepEqual(Object.getOwnPropertyDescriptor(runtime, 'startActivation'), original)
+  assert.equal(before, undefined)
+  assert.equal(typeof runtime.startContinuable, 'undefined')
+})
+
+await test('activation guard preserves member-relative delegation budget and halt admission', async t => {
+  const workspace = await mkdtemp(join(tmpdir(), 'agent-teams-activation-'))
+  t.after(() => rm(workspace, { recursive: true, force: true }))
+  const team = {
+    id: 'team', name: 'Team', captainSessionId: 'captain', createdAt: 1, taskSeq: 0, tasks: [],
+    members: [{ id: 'member-id', name: 'worker', status: 'idle', joinedAt: 1 }],
+  }
+  const root = join(workspace, '.agent-teams')
+  await createTeamDir(root, team)
+  const worker = child({ workspace })
+  let calls = 0
+  const runtime = { async startActivation(spec) { calls++; return spec } }
+  const ctx = scope({ subagents: runtime, agents: { get: id => id === worker.id ? worker : undefined } })
+  installMemberDelegationGuard(ctx, '.agent-teams', 0)
+  await assert.rejects(runtime.startActivation({ request: { parent: worker } }), /delegation limit \(0\)/)
+  assert.equal(calls, 0)
+  ctx.dispose()
+  const allowed = scope({ subagents: runtime, agents: ctx.agents })
+  installMemberDelegationGuard(allowed, '.agent-teams', 1)
+  await runtime.startActivation({ request: { parent: worker } })
+  const descendant = { session: { header: { parentSession: worker.id }, ownEvents: () => [] } }
+  await assert.rejects(runtime.startActivation({ request: { parent: descendant } }), /delegation limit \(1\)/)
+  await writeTeam(root, { ...team, halted: true })
+  await assert.rejects(runtime.startActivation({ request: { parent: worker } }), /no longer admitting delegated work/)
+  allowed.dispose()
+  assert.equal(calls, 1)
+})
+
+await test('member drain selects the activation host API and preserves targeted failure', async () => {
+  assert.equal(typeof compat.drainMemberChildren, 'function')
+  const parent = { id: 'captain' }, ids = ['member', 'descendant']
+  const failure = new Error('native drain failed')
+  let calls = 0
+  const runtime = {
+    async drainChildren(actualParent, actualIds) {
+      assert.equal(this, runtime)
+      assert.equal(actualParent, parent)
+      assert.equal(actualIds, ids)
+      calls++
+      throw failure
+    },
+    async drainContinuableChildren() { assert.fail('activation API must take precedence') },
+  }
+  await assert.rejects(() => compat.drainMemberChildren(runtime, parent, ids), error => error === failure)
+  assert.equal(calls, 1)
+})
+
+await test('member drain falls back to the legacy host API with its native receiver', async () => {
+  assert.equal(typeof compat.drainMemberChildren, 'function')
+  const parent = { id: 'captain' }, ids = ['member']
+  let calls = 0
+  const runtime = { async drainContinuableChildren(actualParent, actualIds) {
+    assert.equal(this, runtime)
+    assert.equal(actualParent, parent)
+    assert.equal(actualIds, ids)
+    calls++
+  } }
+  await compat.drainMemberChildren(runtime, parent, ids)
+  assert.equal(calls, 1)
+})
+
+await test('member drain rejects a missing contract instead of pretending teardown succeeded', async () => {
+  assert.equal(typeof compat.drainMemberChildren, 'function')
+  await assert.rejects(() => compat.drainMemberChildren({}, { id: 'captain' }, ['member']), /unsupported Harness subagent contract.*missing member drain API/)
+})
+
+function modelPolicyFixture(routes, projected = false) {
+  let calls = 0
+  const events = routes === undefined ? [] : [{ type: 'subagent/model-selection-policy', data: { allowedModels: routes } }]
+  const captain = { options: { provider: 'primary', model: 'model' }, session: {
+    requestHeader: () => undefined, ownEvents: () => projected ? [] : events,
+  } }
+  const ctx = { llm: { async resolveCallConfig(selection) { calls++; return selection } },
+    get(name) { assert.equal(name, 'sessionProjections'); return this.sessionProjections },
+    ...(projected ? { sessionProjections: { stateOf(session, key) {
+      assert.equal(session, captain.session)
+      assert.equal(key, 'subagentModelSelectionPolicy')
+      return routes
+    } } } : {}),
+  }
+  return { ctx, captain, calls: () => calls }
+}
+
+await test('member route rejects an explicit model outside the captured session policy before provider lookup', async () => {
+  const fixture = modelPolicyFixture([{ provider: 'primary', model: 'model' }])
+  await assert.rejects(resolveMemberLlmSelection(fixture.ctx, fixture.captain, { provider: 'other', model: 'other-model' }), /not allowed for this Session/)
+  assert.equal(fixture.calls(), 0)
+})
+
+await test('member route rejects inherited captain models outside the selected child routes', async () => {
+  const fixture = modelPolicyFixture([{ provider: 'allowed', model: 'child-model' }])
+  await assert.rejects(resolveMemberLlmSelection(fixture.ctx, fixture.captain, {}), /not allowed for this Session/)
+  assert.equal(fixture.calls(), 0)
+})
+
+await test('member route rejects a fallback outside the selected child routes', async () => {
+  const fixture = modelPolicyFixture([{ provider: 'primary', model: 'model' }])
+  await assert.rejects(resolveMemberLlmSelection(fixture.ctx, fixture.captain, { fallback: { provider: 'other', model: 'other-model' } }), /not allowed for this Session/)
+  assert.equal(fixture.calls(), 0)
+})
+
+await test('member route accepts an allowed model and allowed fallback', async () => {
+  const fixture = modelPolicyFixture([{ provider: 'primary', model: 'model' }])
+  const selected = await resolveMemberLlmSelection(fixture.ctx, fixture.captain, { fallback: { provider: 'primary', model: 'model' } })
+  assert.equal(selected.provider, 'primary')
+  assert.equal(selected.model, 'model')
+  assert.equal(fixture.calls(), 1)
+})
+
+await test('member route respects the host projection including policy inherited from session history', async () => {
+  const fixture = modelPolicyFixture([{ provider: 'allowed', model: 'child-model' }], true)
+  await assert.rejects(resolveMemberLlmSelection(fixture.ctx, fixture.captain, {}), /not allowed for this Session/)
+  assert.equal(fixture.calls(), 0)
+})
+
+await test('member route fails closed on malformed captured policy', async () => {
+  const fixture = modelPolicyFixture([{ provider: 'primary' }])
+  await assert.rejects(resolveMemberLlmSelection(fixture.ctx, fixture.captain, {}), /invalid.*model.*policy/)
+  assert.equal(fixture.calls(), 0)
+})
+
+await test('member route still enforces its saved policy when the host projection is not registered', async () => {
+  const fixture = modelPolicyFixture([{ provider: 'allowed', model: 'child-model' }])
+  fixture.ctx.sessionProjections = { stateOf: () => undefined }
+  await assert.rejects(resolveMemberLlmSelection(fixture.ctx, fixture.captain, {}), /not allowed for this Session/)
+  assert.equal(fixture.calls(), 0)
+})
+
+await test('member route retains legacy inheritance when no session policy exists', async () => {
+  const fixture = modelPolicyFixture(undefined)
+  assert.deepEqual(await resolveMemberLlmSelection(fixture.ctx, fixture.captain, {}), { provider: 'primary', model: 'model' })
+})
+
+for (const withProjection of [false, true]) {
+  await test(`member policy reads an optional service from a real Cordis plugin context (projection=${withProjection})`, async t => {
+    const host = new Context()
+    const fixture = modelPolicyFixture([{ provider: 'primary', model: 'model' }], withProjection)
+    if (withProjection) host.provide('sessionProjections', fixture.ctx.sessionProjections)
+    let pluginContext
+    const fiber = host.plugin({ apply(ctx) { pluginContext = ctx } })
+    t.after(() => fiber.dispose())
+    await fiber.await()
+    assert.ok(pluginContext)
+    assert.doesNotThrow(() => compat.assertMemberModelSelection(pluginContext, fixture.captain, { provider: 'primary', model: 'model' }))
+    assert.throws(() => compat.assertMemberModelSelection(pluginContext, fixture.captain, { provider: 'other', model: 'other' }), /not allowed for this Session/)
+  })
+}
+
+await test('unsupported creation contract fails explicitly without mutating the runtime', async () => {
+  const runtime = { getProvider: () => ({ prepareContinuable() {}, capabilities: { persona: true, toolFilter: true } }) }
+  const ctx = scope({ subagents: runtime })
+  assert.throws(() => installMemberDelegationGuard(ctx, '.agent-teams', 0), /unsupported Harness subagent contract/)
+  assert.equal(typeof runtime.startContinuable, 'undefined')
 })

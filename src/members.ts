@@ -19,7 +19,7 @@ import { foldSubagentDescriptor } from '@deepseek-ai/dsh-subagent'
 import { createUserMessage, LlmError, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { join } from 'node:path'
-import { guardSubagentDelivery, installContinuableMemberSetup, memberToolFilter, queueMemberPrompt, restrictableToolNames, startMemberWithLenientFilter, steerMemberPrompt, sessionOwnEvents } from './harness-compat.ts'
+import { assertMemberModelSelection, guardSubagentCreation, guardSubagentDelivery, installContinuableMemberSetup, memberToolFilter, queueMemberPrompt, restrictableToolNames, startMember, startMemberWithLenientFilter, steerMemberPrompt, sessionOwnEvents } from './harness-compat.ts'
 import { markMailboxDelivered, appendMailbox, CAPTAIN_KEY, createMessage, readRetiredMemberIds, readTeamSync, readTeam, releaseMailboxDelivery, withTeamLock, writeTeam } from './state.ts'
 import { mailboxPrompt } from './mailbox.ts'
 import { nearestLiveLead } from './lineage.ts'
@@ -550,6 +550,8 @@ export async function resolveMemberLlmSelection(
   // own default. Explicit effort still wins, while "default" forces that
   // target-default behavior even when the route did not change.
   const model = composed.model.value
+  assertMemberModelSelection(ctx, captain, { provider, model })
+  if (fallback !== undefined) assertMemberModelSelection(ctx, captain, fallback)
   const sameRoute = provider === currentProvider && model === currentModel
   const reasoningEffort = explicitEffort === undefined
     ? sameRoute
@@ -570,6 +572,7 @@ export async function resolveMemberLlmSelection(
   } catch (error: unknown) {
     throw new Error(describeMemberRouteFailure(provider, model, error), { cause: error })
   }
+  assertMemberModelSelection(ctx, captain, resolved)
   return {
     provider: resolved.provider,
     model: resolved.model,
@@ -931,7 +934,7 @@ export async function spawnMember(
     startMemberWithLenientFilter(
       toolFilter => {
         acceptedFilter = toolFilter
-        return ctx.subagents.startContinuable({
+        return startMember(ctx.subagents, {
           provider: config.provider,
           label,
           request: {
@@ -1041,10 +1044,7 @@ export function installRetiredMemberGuard(ctx: Context, stateDir: string): void 
 
 /** Bound all descendant creation, including renamed tools and code-runtime calls. */
 export function installMemberDelegationGuard(ctx: Context, stateDir: string, maxDepth: number): void {
-  const runtime = ctx.subagents
-  let active = true
   const check = (parent: Agent): void => {
-    if (!active) return
     let ancestor: Agent | undefined = parent
     let depth = 1
     while (ancestor !== undefined) {
@@ -1071,24 +1071,7 @@ export function installMemberDelegationGuard(ctx: Context, stateDir: string, max
       depth++
     }
   }
-  ctx.effect(() => {
-    const start = runtime.start
-    const continuable = runtime.startContinuable
-    const startDescriptor = Object.getOwnPropertyDescriptor(runtime, 'start')
-    const continuableDescriptor = Object.getOwnPropertyDescriptor(runtime, 'startContinuable')
-    const guardedStart: typeof start = async (name, request) => { check(request.parent); return start.call(runtime, name, request) }
-    const guardedContinuable: typeof continuable = async spec => { check(spec.request.parent); return continuable.call(runtime, spec) }
-    runtime.start = guardedStart
-    runtime.startContinuable = guardedContinuable
-    return () => {
-      active = false
-      for (const [key, fn, descriptor] of [['start', guardedStart, startDescriptor], ['startContinuable', guardedContinuable, continuableDescriptor]] as const) {
-        if (Object.getOwnPropertyDescriptor(runtime, key)?.value !== fn) continue
-        if (descriptor === undefined) Reflect.deleteProperty(runtime, key)
-        else Object.defineProperty(runtime, key, descriptor)
-      }
-    }
-  }, 'agent-teams: member delegation budget')
+  guardSubagentCreation(ctx, check)
 }
 
 /**

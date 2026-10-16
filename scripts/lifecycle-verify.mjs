@@ -17,7 +17,8 @@ import { buildActivationDirective, invokedAgentTeamsGoal, invokedAgentTeamsInvoc
 import { readArchivedTeam, readMailbox, readTeam, readUnreadMailbox } from '../lib/state.js'
 import { collectArchivedTeamsActivity } from '../lib/snapshot.js'
 
-const deliveryHarness = process.argv.includes('--delivery-harness')
+const activationHarness = process.argv.includes('--activation-harness')
+const deliveryHarness = activationHarness || process.argv.includes('--delivery-harness')
 const modernHarness = deliveryHarness || process.argv.includes('--modern-harness')
 const hostQueue = Symbol.for(deliveryHarness ? 'dsh.subagent.deliverPrompt' : 'dsh.subagent.queuePrompt')
 
@@ -208,7 +209,7 @@ const ctx = {
       child.ctx = childContext(child)
       if (deliveryHarness) delete child.ctx.agent
       if (modernHarness) {
-        for (const listener of listeners.get('agent/session-start') ?? []) listener({ agent: child, source: 'startup' })
+        for (const listener of listeners.get(activationHarness ? 'agent/created' : 'agent/session-start') ?? []) listener({ agent: child, source: 'startup' })
       } else {
         for (const setup of continuableSetups) setup(child.ctx)
       }
@@ -272,6 +273,22 @@ if (modernHarness) {
     return followup.call(this, parent, childId, content, { source, signal })
   }
   ctx.subagents.sendMessage = (parent, id, content) => followup.call(ctx.subagents, parent, id, content)
+}
+
+if (activationHarness) {
+  const drain = ctx.subagents.drainContinuableChildren
+  delete ctx.subagents.drainContinuableChildren
+  ctx.subagents.drainChildren = function (parent, childIds) {
+    if (this !== ctx.subagents) throw new Error('native drain receiver was lost')
+    return drain.call(this, parent, childIds)
+  }
+  const start = ctx.subagents.startContinuable
+  delete ctx.subagents.startContinuable
+  ctx.subagents.startActivation = function (spec) {
+    if (this !== ctx.subagents) throw new Error('native creation receiver was lost')
+    if (spec.delivery !== 'parent') throw new Error('team members require parent-owned delivery')
+    return start.call(this, spec)
+  }
 }
 
 function directPrompt(parent, childId, content, options) {

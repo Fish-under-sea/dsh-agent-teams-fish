@@ -8,11 +8,24 @@
  * sendMessage instead steers a running Agent and must never carry team jobs.
  */
 import type { Context } from '@deepseek-ai/cordis';
-import type { Agent } from '@deepseek-ai/dsh-agent';
+import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent';
 import type { ContentBlock, MessageId, MessageSource } from '@deepseek-ai/dsh-llm';
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session';
 import { type MemberToolFilter } from './tool-policies.ts';
 type Setup = (childCtx: Context, child: Agent) => () => void;
+/** 成员启动在新旧宿主间共有的请求字段，不依赖已移除的宿主类型名。 */
+interface MemberStartSpec {
+    provider: string;
+    label?: string;
+    request: {
+        parent: Agent;
+        prompt: ContentBlock[];
+        persona?: string;
+        toolFilter?: MemberToolFilter;
+        agentOptions?: ModelSelection;
+    };
+    signal: AbortSignal;
+}
 declare module '@deepseek-ai/dsh-llm' {
     interface MessageSourceMap {
         'agent-teams': {
@@ -20,6 +33,14 @@ declare module '@deepseek-ai/dsh-llm' {
         };
     }
 }
+/** 在 0.2.1 的 activation 契约上保留旧版持久子会话与父级通知语义。 */
+export declare function startMember(runtime: Context['subagents'], spec: MemberStartSpec): Promise<{
+    childId: SessionId;
+}>;
+/** 新旧宿主均只停止指定成员子树，保留原生接收者与停止失败。 */
+export declare function drainMemberChildren(runtime: Context['subagents'], parent: Agent, childIds: readonly SessionId[]): Promise<void>;
+/** 只包装真实存在的接口，避免把缺失的旧方法伪装成可调用方法。 */
+export declare function guardSubagentCreation(ctx: Context, check: (parent: Agent) => void): void;
 /** Package identity a released plugin-wrapper source names on older hosts. */
 export declare const AGENT_TEAMS_PLUGIN_NAME = "@nanmicoder/dsh-agent-teams";
 /**
@@ -63,6 +84,11 @@ export declare function agentTeamsSource(modern: AgentTeamsSource): MessageSourc
 export declare function onAgentReady(ctx: Context, listener: (agent: Agent, vetoable: boolean) => void): () => void;
 /** Read child-owned history, excluding any descriptor inherited from a parent. */
 export declare function sessionOwnEvents(session: Session): readonly SessionEvent[];
+/** 读取宿主冻结的会话策略，旧版没有投影服务时检查本会话日志。 */
+export declare function assertMemberModelSelection(ctx: Context, captain: Agent, route: {
+    provider: string;
+    model: string;
+}): void;
 /** Install before the first request, including cold resume, with HMR cleanup. */
 export declare function installContinuableMemberSetup(ctx: Context, setup: Setup): void;
 /** Queue a distinct host-authored turn; never substitute model-message steer. */

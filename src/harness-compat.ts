@@ -8,7 +8,7 @@
  * sendMessage instead steers a running Agent and must never carry team jobs.
  */
 import type { Context } from '@deepseek-ai/cordis'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent'
 import type { ContentBlock, MessageId, MessageSource } from '@deepseek-ai/dsh-llm'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import * as dshSession from '@deepseek-ai/dsh-session'
@@ -35,7 +35,25 @@ type Followup = (parent: Agent, childId: SessionId, content: ContentBlock[], opt
 type Queue = (parent: Agent, childId: SessionId, content: ContentBlock[], source: MessageSource, signal: AbortSignal) => Promise<MessageId>
 type Deliver = (parent: Agent, childId: SessionId, content: ContentBlock[], source: MessageSource, signal: AbortSignal, delivery: 'queue' | 'steer') => Promise<MessageId>
 type Send = (sender: Agent, targetId: SessionId, content: ContentBlock[], options: { signal: AbortSignal }) => Promise<MessageId>
+/** 成员启动在新旧宿主间共有的请求字段，不依赖已移除的宿主类型名。 */
+interface MemberStartSpec {
+  provider: string
+  label?: string
+  request: {
+    parent: Agent
+    prompt: ContentBlock[]
+    persona?: string
+    toolFilter?: MemberToolFilter
+    agentOptions?: ModelSelection
+  }
+  signal: AbortSignal
+}
 interface RuntimeBoundary {
+  start?: (name: string, request: { parent: Agent }) => Promise<unknown>
+  startContinuable?: (spec: MemberStartSpec) => Promise<{ childId: SessionId }>
+  startActivation?: (spec: MemberStartSpec & { delivery: 'parent' | 'caller' }) => Promise<{ childId: SessionId }>
+  drainChildren?: (parent: Agent, childIds: readonly SessionId[]) => Promise<void>
+  drainContinuableChildren?: (parent: Agent, childIds: readonly SessionId[]) => Promise<void>
   followup?: Followup
   registerContinuableSetup?: (setup: LegacySetup) => () => void
   sendMessage?: Send
@@ -55,6 +73,63 @@ declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
     'agent-teams': { readonly kind: 'agent-teams' }
   }
+}
+
+/** 在 0.2.1 的 activation 契约上保留旧版持久子会话与父级通知语义。 */
+export async function startMember(runtime: Context['subagents'], spec: MemberStartSpec): Promise<{ childId: SessionId }> {
+  const host = boundary(runtime)
+  if (typeof host.startActivation === 'function') {
+    return host.startActivation.call(runtime, { ...spec, delivery: 'parent' })
+  }
+  if (typeof host.startContinuable === 'function') return host.startContinuable.call(runtime, spec)
+  return unsupported('missing member creation API')
+}
+
+/** 新旧宿主均只停止指定成员子树，保留原生接收者与停止失败。 */
+export async function drainMemberChildren(runtime: Context['subagents'], parent: Agent, childIds: readonly SessionId[]): Promise<void> {
+  const host = boundary(runtime)
+  if (typeof host.drainChildren === 'function') return host.drainChildren.call(runtime, parent, childIds)
+  if (typeof host.drainContinuableChildren === 'function') return host.drainContinuableChildren.call(runtime, parent, childIds)
+  return unsupported('missing member drain API')
+}
+
+/** 只包装真实存在的接口，避免把缺失的旧方法伪装成可调用方法。 */
+export function guardSubagentCreation(ctx: Context, check: (parent: Agent) => void): void {
+  const runtime = ctx.subagents
+  const host = boundary(runtime)
+  if (typeof host.start !== 'function' && typeof host.startContinuable !== 'function' && typeof host.startActivation !== 'function') {
+    return unsupported('missing subagent creation API')
+  }
+  ctx.effect(() => {
+    let active = true
+    const restorations: (() => void)[] = []
+    const admit = (parent: Agent): void => { if (active) check(parent) }
+    const replace = <K extends 'start' | 'startContinuable' | 'startActivation'>(key: K, wrapped: RuntimeBoundary[K]): void => {
+      const descriptor = Object.getOwnPropertyDescriptor(host, key)
+      host[key] = wrapped
+      restorations.push(() => {
+        if (Object.getOwnPropertyDescriptor(host, key)?.value !== wrapped) return
+        if (descriptor === undefined) Reflect.deleteProperty(host, key)
+        else Object.defineProperty(host, key, descriptor)
+      })
+    }
+    const start = host.start
+    const continuable = host.startContinuable
+    const activation = host.startActivation
+    if (typeof start === 'function') {
+      replace('start', async (name, request) => { admit(request.parent); return start.call(runtime, name, request) })
+    }
+    if (typeof continuable === 'function') {
+      replace('startContinuable', async spec => { admit(spec.request.parent); return continuable.call(runtime, spec) })
+    }
+    if (typeof activation === 'function') {
+      replace('startActivation', async spec => { admit(spec.request.parent); return activation.call(runtime, spec) })
+    }
+    return () => {
+      active = false
+      for (const restore of restorations.reverse()) restore()
+    }
+  }, 'agent-teams: member delegation budget')
 }
 
 /** Package identity a released plugin-wrapper source names on older hosts. */
@@ -126,6 +201,32 @@ export function sessionOwnEvents(session: Session): readonly SessionEvent[] {
   const legacy = session as unknown as { events?: readonly SessionEvent[]; header: { seedLength?: number } }
   if (!Array.isArray(legacy.events)) return unsupported('missing ownEvents/legacy session log')
   return legacy.events.slice(legacy.header.seedLength ?? 0)
+}
+
+/** 读取宿主冻结的会话策略，旧版没有投影服务时检查本会话日志。 */
+export function assertMemberModelSelection(ctx: Context, captain: Agent, route: { provider: string; model: string }): void {
+  const projections = ctx.get?.('sessionProjections') as {
+    stateOf(session: Session, key: string): unknown
+  } | undefined
+  const session = captain.session as unknown as { ownEvents?: () => readonly SessionEvent[]; events?: readonly SessionEvent[] }
+  const projected = projections?.stateOf(captain.session, 'subagentModelSelectionPolicy')
+  const policy = projected === undefined
+    ? (typeof session.ownEvents === 'function' || Array.isArray(session.events))
+      ? (sessionOwnEvents(captain.session) as readonly { type: string; data: unknown }[]).find(event => event.type === 'subagent/model-selection-policy')?.data
+      : undefined
+    : projected
+  if (policy === undefined || policy === null) return
+  const routes: unknown = projected === undefined
+    ? (policy as { allowedModels?: unknown }).allowedModels
+    : policy
+  if (!Array.isArray(routes) || routes.length === 0 || routes.some((candidate: unknown) => (
+    typeof candidate !== 'object' || candidate === null
+    || !('provider' in candidate) || typeof candidate.provider !== 'string' || candidate.provider.length === 0
+    || !('model' in candidate) || typeof candidate.model !== 'string' || candidate.model.length === 0
+  ))) throw new Error('agent-teams: invalid captured subagent model selection policy')
+  if (!routes.some(candidate => candidate.provider === route.provider && candidate.model === route.model)) {
+    throw new Error(`agent-teams: child LLM route "${route.provider}/${route.model}" is not allowed for this Session; choose a route from list_subagent_models`)
+  }
 }
 
 /** Install before the first request, including cold resume, with HMR cleanup. */

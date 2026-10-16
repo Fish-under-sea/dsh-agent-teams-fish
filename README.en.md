@@ -16,6 +16,14 @@
 
 ---
 
+> **[0.7.2](release-notes/v0.7.2.md) (2026-10-17)**：修复 DSH `0.2.1-alpha.2` 的团队成员派发故障。
+>
+> 新宿主移除 `startContinuable`，改用 `startActivation`。本版按真实能力适配启动入口，并以 `delivery: 'parent'` 保留持久成员与父级通知；委派守卫不再包装不存在的方法。停止、重派和归档同步适配 `drainChildren`，保留指定子树停止与失败阻断。旧宿主回退、工具限制、委派深度预算、停机准入与热重载还原均有回归覆盖。此前只补齐版本白名单，不代表这条运行时启动路径已经兼容。升级后需重启 DSH，无需迁移团队数据。
+>
+> 团队成员最终路由与备用路由同时遵守当前会话保存的子代理模型白名单。省略模型字段不再绕过白名单继承队长模型；越界在创建前拒绝，不自动替用户换模型。未捕获模型策略的旧宿主保持原有行为。
+>
+> 本机 DSH `0.2.1-alpha.2` 已实际完成计划审批、成员领取、32/32 回归测试、回报与归档；原始请求头确认使用预选 Qwen 路由及 `low` 推理档位。可选投影服务通过 `ctx.get` 读取，缺失时回退持久事件，不触发 Cordis 的未注入服务访问错误。完整支持矩阵仍由既有 CI 门禁验收。
+>
 > **🆕 [0.7.1](release-notes/v0.7.1.md) (2026-10-16)**: **fixes "a blank optional field blocks team creation"** — a blank `tool_policy` / `provider` / `model` / `reasoning_effort` / `role` inside an inline plan no longer raises `must not be empty`; a blank now means **not provided**.
 >
 > - **Symptom**: in one session `agent_teams_create` failed **34 times with 0 successes**, in another **14 times with 0 successes**, and no member ever started; the error alternated between `profiles.inline-plan.members[0].tool_policy must not be empty` and `unknown tool policy "default"`.
@@ -148,7 +156,7 @@ You can also add it manually to `profiles/<profile>/package.json`:
 
 ```jsonc
 "dependencies": {
-  "dsh-agent-teams-fish": "^0.7.1"
+  "dsh-agent-teams-fish": "^0.7.2"
 }
 ```
 
