@@ -65,7 +65,10 @@ test('stable tool presentation uses real scoped registry and prompt assembly', a
     on: () => noop, effect: setup => setup(), logger: { warn: noop, debug: noop },
     tools: { register: definition => definitions.push(definition) },
     agents: { get: id => agents.find(agent => agent.id === id) },
-    subagents: { followup: async () => {}, registerContinuableSetup: () => noop },
+    subagents: {
+      followup: async () => {}, registerContinuableSetup: () => noop,
+      async startContinuable() { assert.fail('能力展示测试不应创建成员会话') },
+    },
   }, { stateDir: '.agent-teams', memberProvider: 'spawn', memberMaxDepth: 1, maxMembers: 8, profiles: {} })
   const business = host.plugin({ inject: ['tools'], apply(ctx) {
     owned = ctx
