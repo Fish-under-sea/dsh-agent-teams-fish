@@ -16,6 +16,15 @@
 
 ---
 
+> **🆕 [0.7.1](release-notes/v0.7.1.md)（2026-10-16）**：**修复「可选字段填空串就建不起团队」** —— 内联计划的 `tool_policy` / `provider` / `model` / `reasoning_effort` / `role` 填 `""` 或纯空白时，不再报 `must not be empty`，改按**未提供**处理。
+>
+> - **症状**：某会话 `agent_teams_create` 连续失败 **34 次、0 次成功**，另一个 **14 次、0 次成功**，代理一个都没启动；报错在 `profiles.inline-plan.members[0].tool_policy must not be empty` 与 `unknown tool policy "default"` 之间反复。
+> - **根因**：队长模型习惯把**每个可选参数都填成空字符串**而不是省略（模型自述 "the tools I need require all parameters, even the optional ones"），而插件**两条路径口径不一致** —— `add_member` / `edit_plan` 走 `trimmedOptional` 把 `""` 洗成 `undefined`（放行），内联计划走 `optionalNonEmptyString`（必抛）。顶层 `profile` 早有空串归一（issue #99），内联计划内部字段漏了。
+> - **修法**：只改 `src/profiles.ts` 的 `optionalNonEmptyString` 一处 —— 空串/纯空白返回 `undefined`。**必填字段一律不动**（`name` / `id` / `subject` / `fallback.provider|model` / 依赖 id 照旧严格，非字符串照旧是硬错误）。
+> - **回归**：新增 `scripts/inline-plan-blank-optional-tdd.mjs`（已挂进 `pnpm verify`），**23/23 全绿**，其中 7 条钉住必填字段仍然抛错。
+> - **附带澄清**：失败会话里 `subagent` 系工具**一次都没被调用过**（70/70 个请求都挂着该工具）——「调不动子代理」的真实形态是模型没有发起；修掉空串习惯后 `list_subagent_models` 一类调用不再被 `` `provider` must be non-empty `` 打回。
+> - **附带修复**：`#161` 判决漂移检测的毫秒容差 `1ms` 小于实测的跨时钟偏移（Windows 上最坏 2.2ms），于是「判决前写好的文件」会被误判成「判决后被改」——测试前置断言约 **57.75%** 概率失败；容差提到 **4ms** 后 400 轮探针 **0/400**、测试连跑 **10/10** 全绿，并补了两个**确定性**回归用例（不依赖真实时钟）。另把三处符号链接用例改为共享运行时探测 `scripts/symlink-support.mjs`：Windows 无开发者模式时按明确原因跳过（原来硬编码或漏跳过，在该类主机上必红），有权限时仍跑完整覆盖。
+>
 > **🆕 [0.7.0](release-notes/v0.7.0.md)（2026-10-12）**：厂商命名空间 **17 → 18**，新增 **MiMo（小米 MiMo）**。
 >
 > - **档位**：与 `meta` / `mistral` / `rwkv` / `seed` / `ernie` / `stepfun` / `jev` 同档 —— 只有「厂商通用图 + 立绘高清」，**没有 Q 版岗位图**。成员请求 `member-mimo-<role>-v2.png` 时第 1 跳落空，**第 2 跳命中自家厂商角色**（链序自 [0.5.1](release-notes/v0.5.1.md) 起为 `vendor+role → vendor → role`），头像照常显示、不破图。
@@ -153,7 +162,7 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 
 ```jsonc
 "dependencies": {
-  "dsh-agent-teams-fish": "^0.7.0"
+  "dsh-agent-teams-fish": "^0.7.1"
 }
 ```
 

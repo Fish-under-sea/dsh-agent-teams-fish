@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import { inspectInstallation } from './doctor.mjs'
 import { policy, workspacePolicy, requiredHostPeers, validatePolicy, validatePackageCompatibility, declaredHostVersions } from './compatibility.mjs'
+import { noSymlinkSupport } from './symlink-support.mjs'
 
 const sourcePolicy = { ...policy, sourceCandidates: [{ version: '0.2.0', repository: 'https://github.com/deepseek-ai/deepseek-harness', commit: '21638c56315ae6a2b552d6091945d3144c9af32e', evidence: 'docs/harness-0.2.0-pre-adaptation/README.md' }] }
 
@@ -42,7 +43,7 @@ test('doctor distinguishes source-preview acceptance from released host validati
   assert.match(result.limits.join(), /does not verify that the installed release matches/)
 })
 
-test('doctor runs through an installed bin symlink and reports success or failure', t => {
+test('doctor runs through an installed bin symlink and reports success or failure', { skip: noSymlinkSupport }, t => {
   const root = mkdtempSync(join(tmpdir(), 'agent-teams-doctor-bin-'))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const host = join(root, 'host')

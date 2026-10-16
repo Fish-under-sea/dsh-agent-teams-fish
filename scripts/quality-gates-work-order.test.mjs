@@ -29,6 +29,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { canDeclareDelivery, describeQualityLoop, planQualityFollowUp } from '../lib/quality-gates.js'
 import { applyQualityFollowUp } from '../lib/tools.js'
+import { noSymlinkSupport } from './symlink-support.mjs'
 
 const qualityGates = await import('../lib/quality-gates.js')
 const artifacts = await import('../lib/artifacts.js').catch(() => undefined)
@@ -265,7 +266,11 @@ test('#174: illegal scope patterns are rejected, never widened to the workspace 
   }
 })
 
-test('#174: traversal never follows a symlink out of the workspace or into a cycle', { skip: artifacts === undefined && 'artifacts module missing in this build' }, () => {
+test('#174: traversal never follows a symlink out of the workspace or into a cycle', {
+  skip: artifacts === undefined
+    ? 'artifacts module missing in this build'
+    : noSymlinkSupport,
+}, () => {
   const root = workspace()
   const outside = mkdtempSync(join(tmpdir(), 'issue174-outside-'))
   try {
@@ -457,7 +462,7 @@ test('#161: an unreadable current artifact makes the production audit incomplete
 test('#174/#161: a directory pattern that is a symlink out of the workspace is never enumerated', {
   skip: artifacts === undefined
     ? 'artifacts module missing in this build'
-    : process.platform === 'win32' ? 'symlink probe' : false,
+    : noSymlinkSupport,
 }, () => {
   const root = workspace()
   const outside = mkdtempSync(join(tmpdir(), 'issue174-outside-'))

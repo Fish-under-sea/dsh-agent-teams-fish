@@ -737,15 +737,23 @@ function requiredNonEmptyString(
   return trimmed
 }
 
+/**
+ * Optional text field: absent, blank, and whitespace-only all mean "not
+ * provided". A blank string carries no information, and rejecting it turned a
+ * caller habit into a deadlock — a captain that fills every optional tool-call
+ * key with `""` could never create an inline plan (see
+ * `scripts/inline-plan-blank-optional-tdd.mjs`). The edit path already treats
+ * blanks this way through `trimmedOptional` in `tools.ts`; this keeps the
+ * profile normalizer on the same rule. Non-string values stay a hard error, and
+ * required fields keep `requiredNonEmptyString`.
+ */
 function optionalNonEmptyString(value: unknown, path: string): string | undefined {
   if (value === undefined) return undefined
   if (typeof value !== 'string') {
     throw new Error(`${path} must be a string`)
   }
   const trimmed = value.trim()
-  if (trimmed === '') {
-    throw new Error(`${path} must not be empty`)
-  }
+  if (trimmed === '') return undefined
   return trimmed
 }
 

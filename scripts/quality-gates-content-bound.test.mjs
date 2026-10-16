@@ -313,6 +313,59 @@ test('#161: the claim-time snapshot and the close-time bytes decide what a verdi
   }
 })
 
+/**
+ * The delivery check compares two clocks: `updatedAt` comes from `Date.now()`
+ * (whole milliseconds) and `mtimeMs` from the filesystem, which records a
+ * sub-millisecond value that can sit *ahead* of the process clock. These cases
+ * pin that skew deterministically instead of hoping a real write lands in the
+ * wrong millisecond, so the tolerance is covered on every platform.
+ *
+ * Both use the legacy path on purpose: a verdict that recorded no digests is
+ * exactly where mtime is the only evidence, and where the skew was misread as a
+ * post-verdict edit.
+ */
+test('#161: filesystem-clock skew smaller than the tolerance is not a post-verdict edit', () => {
+  const root = workspace()
+  try {
+    const recorded = readArtifacts(root, REVIEWED_PATHS)
+    const updatedAt = Date.now()
+    const state = team({ reviewedAttempt: 1 })
+    state.tasks[1].updatedAt = updatedAt
+    // Every reviewed file is stamped slightly *after* the verdict even though it
+    // was written before it. The skew is real (up to ~2.2ms on Windows) but far
+    // below the tolerance, so the verdict still binds this revision.
+    const skewed = recorded.map((artifact) => ({ ...artifact, mtimeMs: updatedAt + 2.2 }))
+    const delivery = canDeclareDelivery(state, { artifacts: skewed })
+    assert.equal(
+      delivery.ok,
+      true,
+      `a small clock skew read as a post-verdict edit: ${JSON.stringify(delivery.blockers)}`,
+    )
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('#161: a write clearly later than the tolerance is still a post-verdict edit', () => {
+  const root = workspace()
+  try {
+    const recorded = readArtifacts(root, REVIEWED_PATHS)
+    const updatedAt = Date.now()
+    const state = team({ reviewedAttempt: 1 })
+    state.tasks[1].updatedAt = updatedAt
+    // A real edit after the verdict moves the mtime well past the tolerance.
+    const later = recorded.map((artifact) => ({ ...artifact, mtimeMs: updatedAt + 500 }))
+    const delivery = canDeclareDelivery(state, { artifacts: later })
+    assert.equal(delivery.ok, false, 'a later write was silently accepted as the reviewed revision')
+    assert.ok(
+      delivery.blockers.some((item) => item.includes('lib/stats.js')),
+      `no blocker for the later write: ${JSON.stringify(delivery.blockers)}`,
+    )
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test('#161: a legitimate later repair and new pass supersede the old pass instead of blocking forever', async () => {
   const root = workspace()
   try {

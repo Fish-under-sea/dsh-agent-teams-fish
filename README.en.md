@@ -16,6 +16,15 @@
 
 ---
 
+> **🆕 [0.7.1](release-notes/v0.7.1.md) (2026-10-16)**: **fixes "a blank optional field blocks team creation"** — a blank `tool_policy` / `provider` / `model` / `reasoning_effort` / `role` inside an inline plan no longer raises `must not be empty`; a blank now means **not provided**.
+>
+> - **Symptom**: in one session `agent_teams_create` failed **34 times with 0 successes**, in another **14 times with 0 successes**, and no member ever started; the error alternated between `profiles.inline-plan.members[0].tool_policy must not be empty` and `unknown tool policy "default"`.
+> - **Root cause**: the captain model fills **every optional parameter with `""`** instead of omitting it (its own reasoning: "the tools I need require all parameters, even the optional ones"), while the plugin treated the two paths differently — `add_member` / `edit_plan` run `trimmedOptional`, which washes `""` into `undefined` (allowed), whereas the inline plan ran `optionalNonEmptyString` (always rejected). The top-level `profile` already normalized blanks (issue #99); the inline plan's inner fields were missed.
+> - **Fix**: one place, `optionalNonEmptyString` in `src/profiles.ts` — a blank or whitespace-only value now returns `undefined`. **Required fields are untouched** (`name` / `id` / `subject` / `fallback.provider|model` / dependency ids stay strict; a non-string is still a hard error).
+> - **Regression**: new `scripts/inline-plan-blank-optional-tdd.mjs` (wired into `pnpm verify`), **23/23 green**, including 7 assertions that keep required fields rejecting blanks.
+> - **Also clarified**: the `subagent` tools were **never called at all** in those sessions (all 70/70 request headers carried the tool) — "cannot call a subagent" really meant the model never issued the call; with the blank-string habit fixed, calls such as `list_subagent_models` are no longer bounced by `` `provider` must be non-empty ``.
+> - **Also fixed**: the `#161` drift check used a `1ms` mtime tolerance, smaller than the measured cross-clock skew (worst case 2.2ms on Windows), so a file written *before* a verdict read as modified *after* it — the test precondition failed about **57.75%** of runs. Raising the tolerance to **4ms** turned the 400-round probe to **0/400** and ten consecutive suite runs **10/10** green, backed by two new **deterministic** regression cases that inject the skew instead of hoping for it. Three symlink-dependent cases now share the runtime probe `scripts/symlink-support.mjs`: they skip with an explicit reason where Windows lacks Developer Mode (previously hard-coded or not skipped at all, so they always failed on such a host) and still run in full where symlinks work.
+>
 > **🆕 [0.7.0](release-notes/v0.7.0.md) (2026-10-12)**: vendor namespace **17 → 18**, adding **MiMo (Xiaomi MiMo)**.
 >
 > - **Tier**: the same tier as `meta` / `mistral` / `rwkv` / `seed` / `ernie` / `stepfun` / `jev` — a vendor-generic portrait plus an HD one, **no role art**. A member request for `member-mimo-<role>-v2.png` misses hop 1 and lands on **the vendor's own character at hop 2** (the chain has been `vendor+role → vendor → role` since [0.5.1](release-notes/v0.5.1.md)), so avatars render normally.
@@ -139,7 +148,7 @@ You can also add it manually to `profiles/<profile>/package.json`:
 
 ```jsonc
 "dependencies": {
-  "dsh-agent-teams-fish": "^0.7.0"
+  "dsh-agent-teams-fish": "^0.7.1"
 }
 ```
 
