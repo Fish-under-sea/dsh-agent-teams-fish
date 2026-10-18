@@ -7,6 +7,18 @@ const json = (path, value) => writeFileSync(path, JSON.stringify(value, null, 2)
 
 export const runtimeScenarios = ['lifecycle', 'fallback', 'failure', 'captain-idle-wakeup', 'progressive-entry', 'web-approval', 'protocol-compatibility', 'stability'];
 
+/**
+ * 0.2.1-rc.2 起 @deepseek-ai/dsh-client-connection 自己 inject credentials，而它之前的
+ * headless 基座没有凭据提供者，连接会一直 pending（runtime-lab-connection）。旧宿主的基座
+ * 自带 @deepseek-ai/dsh-credentials-local，再 provide 一次会让 cordis 抛
+ * `service "credentials" has been registered` 并让整个插件树加载失败，所以只在宿主源码
+ * 确实声明了该依赖时注入内存桩。
+ */
+export function webApprovalNeedsCredentialsStub(runtime) {
+    const source = join(runtime, 'node_modules/@deepseek-ai/dsh-client-connection/lib/index.js');
+    return existsSync(source) && /inject\s*=\s*\[[^\]]*['"]credentials['"]/.test(readFileSync(source, 'utf8'));
+}
+
 /** Run the same fixture and persisted-state assertions against an already prepared runtime. */
 export async function runRuntimeScenarios({ report, runtime, command, environment, selectedScenarios = runtimeScenarios, linkWorkspacePackages = false }) {
 const runs = [];
@@ -58,7 +70,9 @@ for (const scenario of selectedScenarios) {
     }
     if (scenario === 'web-approval') {
         copyFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures/harness-runtime-web-approval.mjs'), join(profile, 'fixture-web-approval.mjs'));
-        copyFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures/harness-runtime-credentials.mjs'), join(profile, 'fixture-credentials.mjs'));
+        const credentialsStub = webApprovalNeedsCredentialsStub(runtime);
+        if (credentialsStub)
+            copyFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures/harness-runtime-credentials.mjs'), join(profile, 'fixture-credentials.mjs'));
         writeFileSync(join(profile, 'cordis.patch.yml'), readFileSync(join(profile, 'cordis.patch.yml'), 'utf8') + `- id: runtime-lab-fixture
   disabled: true
 - id: headless-startup
@@ -71,9 +85,7 @@ for (const scenario of selectedScenarios) {
       config:
         host: 127.0.0.1
         port: 0
-    - id: runtime-lab-credentials
-      name: ./fixture-credentials.mjs
-    - id: runtime-lab-connection
+${credentialsStub ? '    - id: runtime-lab-credentials\n      name: ./fixture-credentials.mjs\n' : ''}    - id: runtime-lab-connection
       name: '@deepseek-ai/dsh-client-connection'
     - id: runtime-lab-workspace
       name: '@deepseek-ai/dsh-workspace'
