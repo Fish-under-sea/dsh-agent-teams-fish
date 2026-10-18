@@ -16,7 +16,17 @@
 
 ---
 
-> **[0.7.2](release-notes/v0.7.2.md) (2026-10-17)**：修复 DSH `0.2.1-alpha.2` 的团队成员派发故障。
+> **[0.7.3](release-notes/v0.7.3.md) (2026-10-18)**: fixes member dispatch and unreadable child sessions on DSH NEXT 2.0.19 (host `0.2.1-rc.2`).
+>
+> - **Symptoms**: teams could be created, approved and dispatched, but every member failed to start with `agent-teams: provider "spawn" cannot apply a member persona`; the child session was then rejected wholesale by `tool-session-query` (`contains event type "agent-teams/member-composition" ... not marked ignorable`), and message delivery reported `subagent "..." is unavailable`.
+> - **Root cause 1**: the new host's spawn provider declares only `agentOptions` / `agentPreset` / `outputSchema` / `depthLimit`, and `SubagentStartRequest` has no `persona` / `toolFilter` fields — the host preset owns composition now. The old code still requested a persona and was refused by the capability check.
+> - **Root cause 2**: the plugin persisted its composition snapshot as `session.append('agent-teams/member-composition', …)`. That event type is absent from the host's known catalog and was not marked `ignorable`, so the child session log became unreadable (`SessionFormatUnsupportedError`) before any plugin loads.
+> - **Fix**: on preset-only hosts the plugin installs the composition itself inside the child context (`tools.restrict(toolFilter)` + `systemPrompt.section('deployment:persona-prefix')`) instead of putting it into the start request; **every** member records its effective `toolFilter` in `team.json`, which is now the only authority for cold resume (missing or corrupted records are refused before dispatch instead of resuming with an unrestricted tool set); custom session events and the `SessionEventMap` augmentation are gone. Older hosts that do support persona capabilities keep the previous behavior.
+> - **Compatibility**: `0.2.1-rc.2` is now listed (`track: preview`) and all 21 `@deepseek-ai/dsh-*` peer ranges enumerate it; the recommended host remains `0.2.0-rc.2`.
+> - **Regression**: new `scripts/member-composition.test.mjs` (composition installed before the first request / a failed `restrict` aborts the spawn / cold resume rebuilds from `team.json` only and writes no events / missing and corrupted filters refused), wired into `verify:harness-contract`; `harness-compat-tdd` 32/32 and the `member-failure-tdd` / `lifecycle-verify` matrices are green.
+> - ⚠️ **Known limitation**: child sessions already poisoned by 0.7.2 cannot be repaired by the plugin (the read path refuses before any plugin mounts). Archive the old team and rebuild instead of messaging those members; the plugin never rewrites user session history.
+>
+> **🆕 [0.7.2](release-notes/v0.7.2.md) (2026-10-17)**：修复 DSH `0.2.1-alpha.2` 的团队成员派发故障。
 >
 > 新宿主移除 `startContinuable`，改用 `startActivation`。本版按真实能力适配启动入口，并以 `delivery: 'parent'` 保留持久成员与父级通知；委派守卫不再包装不存在的方法。停止、重派和归档同步适配 `drainChildren`，保留指定子树停止与失败阻断。旧宿主回退、工具限制、委派深度预算、停机准入与热重载还原均有回归覆盖。此前只补齐版本白名单，不代表这条运行时启动路径已经兼容。升级后需重启 DSH，无需迁移团队数据。
 >
@@ -156,7 +166,7 @@ You can also add it manually to `profiles/<profile>/package.json`:
 
 ```jsonc
 "dependencies": {
-  "dsh-agent-teams-fish": "^0.7.2"
+  "dsh-agent-teams-fish": "^0.7.3"
 }
 ```
 

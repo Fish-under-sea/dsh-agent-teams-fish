@@ -16,7 +16,17 @@
 
 ---
 
-> **[0.7.2](release-notes/v0.7.2.md)（2026-10-17）**：修复 DSH `0.2.1-alpha.2` 上「计划已批准、任务却始终无法派发」的问题。
+> **[0.7.3](release-notes/v0.7.3.md)（2026-10-18）**：修复 DSH NEXT 2.0.19（宿主 `0.2.1-rc.2`）上「成员一个也起不来、子会话从此不可读」的问题。
+>
+> - **症状**：计划能建、能批准、任务能派，但成员启动即失败 —— `agent-teams: provider "spawn" cannot apply a member persona`；随后该子会话被 `tool-session-query` 整份拒绝：`contains event type "agent-teams/member-composition" ... not marked ignorable`，交付改报 `subagent "..." is unavailable`。
+> - **根因一**：新宿主的 spawn provider 只声明 `agentOptions` / `agentPreset` / `outputSchema` / `depthLimit`，`SubagentStartRequest` 没有 `persona` / `toolFilter` 字段，成员人设与工具限制改由宿主预设负责。旧代码按「宿主支持 persona」发起派发，被能力检查直接拒绝。
+> - **根因二**：旧代码用 `session.append('agent-teams/member-composition', …)` 存组合快照，而该事件类型不在宿主的已知目录里、也没标 `ignorable`，于是子会话日志**不可读**（`SessionFormatUnsupportedError`）—— 拒绝发生在插件加载之前的读取路径上。
+> - **修复**：只有 `agentPreset` 能力的宿主改走「组合自装」：插件在成员子上下文里执行 `tools.restrict(toolFilter)` 与 `systemPrompt.section('deployment:persona-prefix')`，不再把两项塞进启动请求；**每个成员**都把生效的 `toolFilter` 记进 `team.json` 作为冷恢复的唯一权威（缺失或损坏一律在派发前拒绝，不以无限制工具放行）；彻底删除自定义会话事件的写入与 `SessionEventMap` 增强。原生支持人设能力的旧宿主行为不变。
+> - **兼容矩阵**：`0.2.1-rc.2` 以 `track: preview` 收录，21 条 `@deepseek-ai/dsh-*` peer 白名单同步枚举；推荐宿主仍是 `0.2.0-rc.2`，未提升任何版本的支持等级。
+> - **回归**：新增 `scripts/member-composition.test.mjs`（preset-only 首请求前装好人设与过滤 / `restrict` 失败即中止 / 冷恢复只从 `team.json` 重建且不写事件 / 无过滤与坏过滤被拒），挂进 `verify:harness-contract`；`harness-compat-tdd` 32/32、`member-failure-tdd` 与 `lifecycle-verify` 三套矩阵全绿。
+> - ⚠️ **遗留**：已被上一版写坏的子会话无法由插件修复（读取先于插件挂载就拒绝了），请归档旧团队后重建，不要继续向这些成员发消息；插件不会改写用户历史会话。
+>
+> **🆕 [0.7.2](release-notes/v0.7.2.md)（2026-10-17）**：修复 DSH `0.2.1-alpha.2` 上「计划已批准、任务却始终无法派发」的问题。
 >
 > - **根因**：新版宿主以 `startActivation` 取代 `startContinuable`，旧委派守卫却给不存在的方法套上包装，最终抛出 `Cannot read properties of undefined (reading 'call')`。此前仅补齐宿主版本白名单，未覆盖这条真实启动路径。
 > - **修复**：按宿主实际能力选择启动接口；新版明确使用 `delivery: 'parent'`，保留持久成员、父会话通知及冷恢复语义。委派守卫只包装真实存在的方法，并覆盖新版入口；停止、重派和归档统一适配 `drainChildren`，旧宿主仍走原接口。
@@ -170,7 +180,7 @@ dsh plugin --profile <profile> add dsh-agent-teams-fish
 
 ```jsonc
 "dependencies": {
-  "dsh-agent-teams-fish": "^0.7.2"
+  "dsh-agent-teams-fish": "^0.7.3"
 }
 ```
 
