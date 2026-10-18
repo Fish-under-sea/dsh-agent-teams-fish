@@ -120,12 +120,22 @@ export declare function composeMemberRoute(request: Pick<MemberLlmSelectionReque
     readonly provider: string;
     readonly model: string;
 }): MemberRouteResolution | undefined;
+/**
+ * 新版（preset-only）宿主不再声明 persona/toolFilter 能力位，改由插件在成员
+ * 首个请求前自行安装；这里就是那份被安装的组合。
+ */
+interface MemberComposition {
+    persona: string;
+    toolFilter: MemberToolFilter;
+}
 /** Process-local bridge between spawn admission and synchronous child setup. */
 export interface MemberSelectionRuntime {
+    /** 已安装可拒绝创建的成员组合钩子，不能只略过宿主能力检查。 */
+    readonly scopedComposition?: true;
     /** Trusted fresh-child admission, before the durable member id is written. */
     isPendingMember(agent: Agent): boolean;
     /** Make one selection visible while Harness materializes the fresh child. */
-    withPending<T>(parentSessionId: string, label: string, selection: MemberLlmSelection, operation: () => Promise<T>): Promise<T>;
+    withPending<T>(parentSessionId: string, label: string, selection: MemberLlmSelection, operation: () => Promise<T>, composition?: MemberComposition): Promise<T>;
 }
 /**
  * Validate a resolved roster against every provider catalog before any child
@@ -239,8 +249,12 @@ export declare function resolveMemberLlmSelection(ctx: Context, captain: Agent, 
  * cold resume restores the same selection from the owning team's durable
  * record. Legacy members without a complete saved route retain Harness's
  * descriptor provider/model behavior.
+ * @param ctx - the plugin context (injects `subagents`).
+ * @param stateDir - configured state directory, read for cold-resume snapshots.
+ * @param onFailureSettled - settlement hook after a member turn failure.
+ * @param executionPrompt - plugin-wide execution prompt (a persona input).
  */
-export declare function installMemberSelectionRuntime(ctx: Context, stateDir: string, onFailureSettled?: (workspace: string, teamId: string, memberName: string) => Promise<void>): MemberSelectionRuntime;
+export declare function installMemberSelectionRuntime(ctx: Context, stateDir: string, onFailureSettled?: (workspace: string, teamId: string, memberName: string) => Promise<void>, executionPrompt?: string): MemberSelectionRuntime;
 /**
  * The member's system prompt (persona), shadowing the deployment persona for
  * that child. Self-contained: it replaces the whole persona section.

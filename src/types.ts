@@ -289,9 +289,10 @@ export interface TeamMember {
   toolPolicy?: string
   /**
    * The immutable effective tool filter resolved when the member was created
-   * and handed to the child's `toolFilter`. `team.json` keeps it for audit,
-   * status, and recovery diagnostics; the continuable descriptor remains the
-   * authority that reapplies the filter to a cold-resumed child.
+   * and installed on the child. Every member records it: on a preset-only host
+   * (no `persona`/`toolFilter` capability) the continuable descriptor carries
+   * neither, so `team.json` is the durable authority a cold resume reinstalls
+   * the persona and this filter from.
    */
   toolFilter?: MemberToolFilter
   joinedAt: number

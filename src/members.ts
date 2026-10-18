@@ -158,8 +158,53 @@ export function composeMemberRoute(
   }
 }
 
+/**
+ * 新版（preset-only）宿主不再声明 persona/toolFilter 能力位，改由插件在成员
+ * 首个请求前自行安装；这里就是那份被安装的组合。
+ */
+interface MemberComposition {
+  persona: string
+  toolFilter: MemberToolFilter
+}
+
+/** 拒绝损坏的历史策略，不把非法 allow/deny 当成无限制。 */
+function normalizeToolFilter(value: unknown): MemberToolFilter {
+  if (typeof value !== 'object' || value === null || !('deny' in value) || !Array.isArray(value.deny)
+    || value.deny.some((name: unknown) => typeof name !== 'string')
+    || ('allow' in value && (!Array.isArray(value.allow) || value.allow.some((name: unknown) => typeof name !== 'string')))
+    || Object.keys(value).some(key => key !== 'allow' && key !== 'deny')) {
+    throw new Error('agent-teams: invalid member composition toolFilter')
+  }
+  const filter = value as { deny: string[]; allow?: string[] }
+  return { deny: [...filter.deny], ...filter.allow === undefined ? {} : { allow: [...filter.allow] } }
+}
+
+/**
+ * Rebuild the composition a preset-only host must install on cold resume.
+ * `team.json` is the durable authority: the member record keeps the exact
+ * filter the host accepted, and the persona is deterministic from the same
+ * durable team/member fields the spawn used. A record without a filter is
+ * refused instead of resumed with an unrestricted tool set.
+ * @param team - the durable team owning the member.
+ * @param memberName - the member identity decoded from the child label.
+ * @param stateDir - configured state directory (part of the persona).
+ * @param executionPrompt - plugin-wide execution prompt, a persona input.
+ */
+function durableMemberComposition(
+  team: TeamState,
+  memberName: string,
+  stateDir: string,
+  executionPrompt?: string,
+): MemberComposition | undefined {
+  const member = team.members.find(item => item.name === memberName && item.status !== 'removed')
+  if (member?.toolFilter === undefined) return undefined
+  return { persona: memberPersona(team, member, stateDir, executionPrompt), toolFilter: normalizeToolFilter(member.toolFilter) }
+}
+
 /** Process-local bridge between spawn admission and synchronous child setup. */
 export interface MemberSelectionRuntime {
+  /** 已安装可拒绝创建的成员组合钩子，不能只略过宿主能力检查。 */
+  readonly scopedComposition?: true
   /** Trusted fresh-child admission, before the durable member id is written. */
   isPendingMember(agent: Agent): boolean
   /** Make one selection visible while Harness materializes the fresh child. */
@@ -168,6 +213,7 @@ export interface MemberSelectionRuntime {
     label: string,
     selection: MemberLlmSelection,
     operation: () => Promise<T>,
+    composition?: MemberComposition,
   ): Promise<T>
 }
 
@@ -642,13 +688,19 @@ function describeMemberRouteFailure(provider: string, model: string, error: unkn
  * cold resume restores the same selection from the owning team's durable
  * record. Legacy members without a complete saved route retain Harness's
  * descriptor provider/model behavior.
+ * @param ctx - the plugin context (injects `subagents`).
+ * @param stateDir - configured state directory, read for cold-resume snapshots.
+ * @param onFailureSettled - settlement hook after a member turn failure.
+ * @param executionPrompt - plugin-wide execution prompt (a persona input).
  */
 export function installMemberSelectionRuntime(
   ctx: Context,
   stateDir: string,
   onFailureSettled?: (workspace: string, teamId: string, memberName: string) => Promise<void>,
+  executionPrompt?: string,
 ): MemberSelectionRuntime {
   const pending = new Map<string, MemberLlmSelection>()
+  const compositions = new Map<string, MemberComposition>()
   installContinuableMemberSetup(ctx, (childCtx, child) => {
     const descriptor = foldSubagentDescriptor(sessionOwnEvents(child.session))
     if (descriptor?.mode !== 'continuable' || !descriptor.label.startsWith(MEMBER_LABEL_PREFIX)) {
@@ -665,6 +717,47 @@ export function installMemberSelectionRuntime(
     const workspace = child.session.header.cwd ?? process.cwd()
     const stateRoot = join(workspace, stateDir)
     const key = pendingSelectionKey(parentSessionId, descriptor.label)
+    const runtimeCapabilities = ctx.subagents.getProvider?.(descriptor.provider)?.capabilities as
+      { agentPreset?: boolean; persona?: boolean; toolFilter?: boolean } | undefined
+    // A preset-only host advertises only `agentPreset`/`agentOptions`/... and
+    // therefore cannot apply the persona or the tool filter from the start
+    // request. The plugin owns both: it installs them here, before the first
+    // request, for a fresh child and for every cold resume.
+    const presetOnly = runtimeCapabilities?.agentPreset === true
+      && runtimeCapabilities.persona === undefined && runtimeCapabilities.toolFilter === undefined
+    const emptyComposition = (): void => undefined
+    let disposeComposition = emptyComposition
+    if (presetOnly) {
+      // The in-memory snapshot exists only while the spawn is materializing;
+      // a cold resume rebuilds the same composition from durable team.json.
+      const durable = readTeamSync(stateRoot, teamId)
+      const composition = compositions.get(key)
+        ?? (durable?.captainSessionId === parentSessionId
+          ? durableMemberComposition(durable, memberName, stateDir, executionPrompt)
+          : undefined)
+      if (composition === undefined) {
+        throw new Error(
+          `agent-teams: member "${memberName}" has no durable composition snapshot (tool filter) in team.json, `
+          + 'so this preset-only host cannot resume it with the intended persona and tool isolation; re-add the member',
+        )
+      }
+      const releaseFilter = childCtx.tools.restrict(composition.toolFilter)
+      try {
+        const releasePersona = childCtx.systemPrompt.section({
+          name: 'deployment:persona-prefix',
+          order: childCtx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
+          text: composition.persona,
+        })
+        let disposed = false
+        disposeComposition = () => {
+          if (disposed) return
+          disposed = true
+          releasePersona()
+          releaseFilter()
+        }
+        childCtx.effect(() => disposeComposition, 'agent-teams: member composition')
+      } catch (error) { disposeComposition(); if (disposeComposition === emptyComposition) releaseFilter(); throw error }
+    }
     // Internal settlement wakeups bypass the public delivery guard. Recheck
     // exact durable membership on every proposed step, including cold resume.
     const disposeAdmission = childCtx.on('agent/pre-step', async (payload, next) => {
@@ -681,7 +774,7 @@ export function installMemberSelectionRuntime(
     let selection = pending.get(key)
     if (selection === undefined) {
       const team = readTeamSync(stateRoot, teamId)
-      if (team?.captainSessionId !== parentSessionId) return disposeAdmission
+      if (team?.captainSessionId !== parentSessionId) return () => { disposeAdmission(); disposeComposition() }
       const durableMember = team.members.find(member => member.name === memberName)
       selection = selectionFromMember(durableMember)
       if (selection !== undefined && (descriptor.agentProvider !== durableMember?.provider || descriptor.agentModel !== durableMember?.model)) {
@@ -734,7 +827,7 @@ export function installMemberSelectionRuntime(
       }
     })
     // Legacy teams still need failure reporting even without a saved route.
-    if (selection === undefined) return () => { disposeFailure(); disposeAdmission() }
+    if (selection === undefined) return () => { disposeFailure(); disposeAdmission(); disposeComposition() }
     const selectionRef = { current: modelSelection(selection), assembled: undefined as ModelSelection | undefined }
     const disposeSelection = installModelSelection(childCtx, selectionRef)
     const fallback = selection.fallback
@@ -764,10 +857,12 @@ export function installMemberSelectionRuntime(
       disposeSelection()
       disposeFailure()
       disposeAdmission()
+      disposeComposition()
     }
   })
 
   return {
+    scopedComposition: true,
     isPendingMember(agent) {
       const parent = agent.session.header.parentSession
       const descriptor = foldSubagentDescriptor(sessionOwnEvents(agent.session))
@@ -779,16 +874,19 @@ export function installMemberSelectionRuntime(
       label: string,
       selection: MemberLlmSelection,
       operation: () => Promise<T>,
+      composition?: MemberComposition,
     ): Promise<T> {
       const key = pendingSelectionKey(parentSessionId, label)
       if (pending.has(key)) {
         throw new Error(`member model selection is already pending for "${label}"`)
       }
       pending.set(key, selection)
+      if (composition !== undefined) compositions.set(key, composition)
       try {
         return await operation()
       } finally {
         pending.delete(key)
+        compositions.delete(key)
       }
     },
   }
@@ -917,10 +1015,14 @@ export async function spawnMember(
   if (provider.prepareContinuable === undefined) {
     throw new Error(`agent-teams: provider "${config.provider}" does not support continuable members`)
   }
-  if (!provider.capabilities.persona) {
+  const capabilities = provider.capabilities as { persona?: boolean; toolFilter?: boolean; agentPreset?: boolean }
+  const scoped = capabilities.persona === undefined && capabilities.toolFilter === undefined
+    && capabilities.agentPreset === true && selections.scopedComposition === true
+    && typeof (ctx.subagents as unknown as { startActivation?: unknown }).startActivation === 'function'
+  if (!scoped && !capabilities.persona) {
     throw new Error(`agent-teams: provider "${config.provider}" cannot apply a member persona`)
   }
-  if (!provider.capabilities.toolFilter) {
+  if (!scoped && !capabilities.toolFilter) {
     throw new Error(`agent-teams: provider "${config.provider}" cannot restrict captain-only tools for members`)
   }
   const label = `${MEMBER_LABEL_PREFIX}${team.id}:${member.name}`
@@ -930,23 +1032,19 @@ export async function spawnMember(
   // The lenient retry may drop names this host reports unknown; keep the exact
   // filter the host accepted so team.json and the child descriptor agree.
   let acceptedFilter = requestedFilter
+  const composition: MemberComposition = { persona: memberPersona(team, member, stateDir, config.executionPrompt), toolFilter: requestedFilter }
   const start = await selections.withPending(captain.id, label, llmSelection, () => (
     startMemberWithLenientFilter(
       toolFilter => {
         acceptedFilter = toolFilter
+        composition.toolFilter = toolFilter
         return startMember(ctx.subagents, {
           provider: config.provider,
           label,
           request: {
             prompt: [{ type: 'text', text: initialPrompt ?? memberWelcome(team, member.name) }],
             parent: captain,
-            persona: memberPersona(team, member, stateDir, config.executionPrompt),
-            // Depth deny entries name host tools; resolve them against the
-            // running host's registry so a renamed delegation tool cannot abort
-            // the spawn (see memberToolFilter). Depth is still enforced by the
-            // parent-chain guard installed at plugin mount. A filter the host
-            // still rejects is retried without the names it reported.
-            toolFilter,
+            ...scoped ? {} : { persona: composition.persona, toolFilter },
             agentOptions: {
               provider: llmSelection.provider,
               model: llmSelection.model,
@@ -964,12 +1062,12 @@ export async function spawnMember(
       requestedFilter,
       relaxableDeny,
     )
-  ))
+  ), scoped ? composition : undefined)
   member.id = start.childId
-  // Only a policy member carries a persisted filter snapshot; a member without
-  // a policy keeps the previous record shape and behavior. The descriptor, not
-  // this snapshot, is what reapplies the filter on a cold resume.
-  if (member.toolFilter !== undefined) member.toolFilter = { ...acceptedFilter }
+  // `team.json` keeps the exact accepted filter for every member: on a
+  // preset-only host it is the only durable authority a cold resume can
+  // reinstall the tool isolation from (the descriptor does not carry it).
+  member.toolFilter = { ...acceptedFilter }
 }
 
 /**
