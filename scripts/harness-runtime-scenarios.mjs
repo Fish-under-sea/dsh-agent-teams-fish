@@ -58,6 +58,7 @@ for (const scenario of selectedScenarios) {
     }
     if (scenario === 'web-approval') {
         copyFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures/harness-runtime-web-approval.mjs'), join(profile, 'fixture-web-approval.mjs'));
+        copyFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures/harness-runtime-credentials.mjs'), join(profile, 'fixture-credentials.mjs'));
         writeFileSync(join(profile, 'cordis.patch.yml'), readFileSync(join(profile, 'cordis.patch.yml'), 'utf8') + `- id: runtime-lab-fixture
   disabled: true
 - id: headless-startup
@@ -70,6 +71,8 @@ for (const scenario of selectedScenarios) {
       config:
         host: 127.0.0.1
         port: 0
+    - id: runtime-lab-credentials
+      name: ./fixture-credentials.mjs
     - id: runtime-lab-connection
       name: '@deepseek-ai/dsh-client-connection'
     - id: runtime-lab-workspace

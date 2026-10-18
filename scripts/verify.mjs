@@ -2018,7 +2018,7 @@ try {
         `$f = '${lockedJson.replaceAll("'", "''")}';
          $s = [System.IO.File]::Open($f, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::ReadWrite);
          [Console]::Out.WriteLine('HELD'); [Console]::Out.Flush();
-         Start-Sleep -Seconds 45; $s.Dispose()`],
+         Start-Sleep -Seconds 90; $s.Dispose()`],
       { stdio: ['ignore', 'pipe', 'inherit'] },
     )
     const held = await new Promise((resolve, reject) => {
@@ -2031,7 +2031,9 @@ try {
       const timer = setTimeout(() => {
         cleanup()
         reject(new Error('timed out waiting for the lock holder'))
-      }, 15_000)
+      // Windows CI is slow to start powershell.exe under load; a short arm
+      // budget turned this into a flaky failure on 2026-10-18.
+      }, 30_000)
       function cleanup() {
         clearTimeout(timer)
         holder.stdout.off('data', onData)

@@ -100,8 +100,21 @@ jobs:
             test "${RELEASE_VERSION}" = "${PACKAGE_VERSION}"
           fi
 
+      - name: Detect a version that is already on npm
+        id: existing
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.value }}
+        shell: bash
+        run: |
+          if npm view "dsh-agent-teams-fish@${PACKAGE_VERSION}" version >/dev/null 2>&1; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::dsh-agent-teams-fish@${PACKAGE_VERSION} is already published; the publish step is skipped and only the GitHub release is created"
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Prevent an older stable release from moving latest backwards
-        if: steps.version.outputs.dist_tag == 'latest'
+        if: steps.version.outputs.dist_tag == 'latest' && steps.existing.outputs.already != 'true'
         env:
           PACKAGE_VERSION: ${{ steps.version.outputs.value }}
         run: |
@@ -121,6 +134,7 @@ jobs:
           JS
 
       - name: Publish to npm
+        if: steps.existing.outputs.already != 'true'
         env:
           NPM_DIST_TAG: ${{ steps.version.outputs.dist_tag }}
         run: npm publish "$RUNNER_TEMP/candidate/candidate.tgz" --ignore-scripts --access public --tag "$NPM_DIST_TAG"
