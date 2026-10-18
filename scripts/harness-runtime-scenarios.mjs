@@ -8,15 +8,54 @@ const json = (path, value) => writeFileSync(path, JSON.stringify(value, null, 2)
 export const runtimeScenarios = ['lifecycle', 'fallback', 'failure', 'captain-idle-wakeup', 'progressive-entry', 'web-approval', 'protocol-compatibility', 'stability'];
 
 /**
- * 0.2.1-rc.2 起 @deepseek-ai/dsh-client-connection 自己 inject credentials，而它之前的
- * headless 基座没有凭据提供者，连接会一直 pending（runtime-lab-connection）。旧宿主的基座
- * 自带 @deepseek-ai/dsh-credentials-local，再 provide 一次会让 cordis 抛
- * `service "credentials" has been registered` 并让整个插件树加载失败，所以只在宿主源码
- * 确实声明了该依赖时注入内存桩。
+ * 0.2.1-rc.2 起 @deepseek-ai/dsh-client-connection 自己 inject credentials。凭据提供者由
+ * @deepseek-ai/dsh-base 声明（`- id: credentials` → dsh-credentials-local），但
+ * @deepseek-ai/dsh-headless 在同版本的 patch 里把它 disabled: true（无头任务用启动期凭据，
+ * 不挂交互式存储），于是连接会一直 pending（runtime-lab-connection），需要内存桩。
+ * 旧宿主（0.1.2 / 0.1.5 系）的 headless 不禁用它，宿主的提供者会自己注册；此时再 provide
+ * 一次会让 cordis 抛 `service "credentials" has been registered` 并让整个插件树加载失败。
+ * 因此按 base → headless 的加载顺序求 credentials 条目的最终状态，只在其被禁用时才注入。
  */
+function credentialsEntryState(patchText) {
+    const lines = patchText.split('\n');
+    let state;
+    for (let index = 0; index < lines.length; index++) {
+        const header = /^(\s*)-\s+id:\s*credentials\s*$/.exec(lines[index]);
+        if (!header)
+            continue;
+        const indent = header[1].length;
+        let disabled = false;
+        let provider = false;
+        for (let cursor = index + 1; cursor < lines.length; cursor++) {
+            const line = lines[cursor];
+            const trimmed = line.trim();
+            if (trimmed === '' || trimmed.startsWith('#'))
+                continue;
+            if (line.length - line.trimStart().length <= indent)
+                break;
+            if (/^disabled:\s*true\s*$/.test(trimmed))
+                disabled = true;
+            if (/^name:\s*['"]?@deepseek-ai\/dsh-credentials-local/.test(trimmed))
+                provider = true;
+        }
+        state = { disabled, provider };
+    }
+    return state;
+}
+
 export function webApprovalNeedsCredentialsStub(runtime) {
-    const source = join(runtime, 'node_modules/@deepseek-ai/dsh-client-connection/lib/index.js');
-    return existsSync(source) && /inject\s*=\s*\[[^\]]*['"]credentials['"]/.test(readFileSync(source, 'utf8'));
+    const connection = join(runtime, 'node_modules/@deepseek-ai/dsh-client-connection/lib/index.js');
+    if (!existsSync(connection) || !/inject\s*=\s*\[[^\]]*['"]credentials['"]/.test(readFileSync(connection, 'utf8')))
+        return false;
+    let state;
+    for (const bundle of ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless']) {
+        const patch = join(runtime, 'node_modules', ...bundle.split('/'), 'cordis.patch.yml');
+        if (!existsSync(patch))
+            continue;
+        state = credentialsEntryState(readFileSync(patch, 'utf8')) ?? state;
+    }
+    // 没有任何凭据条目时连接只能自己等，桩是唯一出路；有条目就看它是否还启用着提供者。
+    return state ? state.disabled : true;
 }
 
 /** Run the same fixture and persisted-state assertions against an already prepared runtime. */
