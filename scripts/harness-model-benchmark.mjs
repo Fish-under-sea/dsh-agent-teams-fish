@@ -86,7 +86,7 @@ async function extract(artifact,label) {
     const unpacked=await command(['tar','-xzf',artifact,'-C',target],report,environment,label+'-unpack',60000);
     if(unpacked.code!==0)throw Error('Artifact extraction failed');
     const packageDir=join(target,'package'),pkg=JSON.parse(readFileSync(join(packageDir,'package.json'),'utf8'));
-    if(pkg.name!=='dsh-agent-teams-fish')throw Error('Wrong artifact identity');
+    if(pkg.name!=='@fish-under-sea/dsh-agent-teams-fish')throw Error('Wrong artifact identity');
     symlinkSync(join(runtime,'node_modules'),join(packageDir,'node_modules'),'dir');
     return {packageDir,artifactSha256:hash(artifact),pluginVersion:pkg.version};
 }
@@ -105,10 +105,11 @@ async function run(label,phase,artifact,existing) {
     if(existsSync(artifactSnapshot))throw Error('Run artifact already exists; never overwrite benchmark evidence');
     writeFileSync(artifactSnapshot,artifact.bytes);
     const extracted={...await extract(artifactSnapshot,label),sourceArtifact:artifact.path};
-    const pluginLink=join(profile,'node_modules/dsh-agent-teams-fish');
+    mkdirSync(join(profile,'node_modules/@fish-under-sea'),{recursive:true});
+    const pluginLink=join(profile,'node_modules/@fish-under-sea/dsh-agent-teams-fish');
     if(existsSync(pluginLink))rmSync(pluginLink);
     symlinkSync(extracted.packageDir,pluginLink,'dir');
-    json(join(profile,'package.json'),{name:'agentteams-real-model-profile',version:'0.0.0',private:true,type:'module',dsh:{profile:{bundles:['@deepseek-ai/dsh-base','@deepseek-ai/dsh-headless','dsh-agent-teams-fish'],patchReload:'startup'}}});
+    json(join(profile,'package.json'),{name:'agentteams-real-model-profile',version:'0.0.0',private:true,type:'module',dsh:{profile:{bundles:['@deepseek-ai/dsh-base','@deepseek-ai/dsh-headless','@fish-under-sea/dsh-agent-teams-fish'],patchReload:'startup'}}});
     mkdirSync(join(runDir,'executed-fixtures'),{recursive:true});
     for(const [source,target] of [['fixtures/harness-model-driver.mjs','fixture-model-driver.mjs'],['fixtures/harness-benchmark-scope.mjs','fixture-benchmark-scope.mjs'],[caseFile,'fixture-model-case.mjs'],...caseName!=='review'?[['fixtures/harness-model-case.mjs','harness-model-case.mjs']]:[],...caseName==='complex'?[['fixtures/harness-complex-oracle.mjs','harness-complex-oracle.mjs']]:[]]) {
         writeFileSync(join(profile,target),testContents[source]);

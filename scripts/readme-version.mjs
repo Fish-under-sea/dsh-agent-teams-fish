@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 // Only this fork's README is checked: the upstream READMEs are kept verbatim for
 // attribution and legitimately name their own historical versions. npm freezes a
 // package's README at publish time, so ours must not name a stale version.
-const README_FILES = ['README.md']
+const README_FILES = ['README.md', 'README.en.md']
 
 // This fork's README documents which upstream tag it is based on. That baseline is
 // historic by design and will differ from this package's own version, so it is

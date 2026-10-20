@@ -67,8 +67,9 @@ for (const scenario of selectedScenarios) {
     mkdirSync(workspace, { recursive: true });
     mkdirSync(join(profile, 'node_modules'), { recursive: true });
     if (linkWorkspacePackages) symlinkSync(join(runtime, 'node_modules/@deepseek-ai'), join(profile, 'node_modules/@deepseek-ai'), 'dir');
-    symlinkSync(join(runtime, 'node_modules/dsh-agent-teams-fish'), join(profile, 'node_modules/dsh-agent-teams-fish'), 'dir');
-    json(join(profile, 'package.json'), { name: 'runtime-test-profile', version: '0.0.0', private: true, type: 'module', dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless', 'dsh-agent-teams-fish'], patchReload: 'startup' } } });
+    mkdirSync(join(profile, 'node_modules/@fish-under-sea'), { recursive: true });
+    symlinkSync(join(runtime, 'node_modules/@fish-under-sea/dsh-agent-teams-fish'), join(profile, 'node_modules/@fish-under-sea/dsh-agent-teams-fish'), 'dir');
+    json(join(profile, 'package.json'), { name: 'runtime-test-profile', version: '0.0.0', private: true, type: 'module', dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-headless', '@fish-under-sea/dsh-agent-teams-fish'], patchReload: 'startup' } } });
     copyFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures/harness-runtime-llm.mjs'), join(profile, 'fixture-llm.mjs'));
     writeFileSync(join(profile, 'cordis.patch.yml'), `- id: llm-deepseek\n  disabled: true\n- id: llm-pi-ai\n  disabled: true\n- id: agent-default-model\n  config:\n    provider: runtime-lab\n    model: fixture-model\n- insert:\n    - id: runtime-lab-fixture\n      name: './fixture-llm.mjs'\n`);
     if (scenario === 'lifecycle')

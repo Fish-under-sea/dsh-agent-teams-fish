@@ -1,21 +1,7 @@
 name: Verify
 
 on:
-  pull_request:
-  push:
-    branches: [main]
   workflow_dispatch:
-  workflow_call:
-    outputs:
-      artifact_name:
-        description: Immutable candidate artifact verified by every host
-        value: ${{ jobs.build.outputs.artifact_name }}
-      artifact_sha256:
-        description: SHA-256 of candidate.tgz
-        value: ${{ jobs.build.outputs.artifact_sha256 }}
-      hosts:
-        description: Exact host versions required by compatibility.json
-        value: ${{ jobs.build.outputs.hosts }}
 
 permissions:
   contents: read

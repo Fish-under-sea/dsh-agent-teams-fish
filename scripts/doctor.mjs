@@ -51,8 +51,8 @@ export function inspectInstallation(hostRoot, profileRoot, support = policy) {
   walk(hostPath)
   let plugin
   if (profileRoot) {
-    const path = locatePackage('dsh-agent-teams-fish', resolve(profileRoot))
-    if (!path) missing.push('dsh-agent-teams-fish (profile)')
+    const path = locatePackage('@fish-under-sea/dsh-agent-teams-fish', resolve(profileRoot))
+    if (!path) missing.push('@fish-under-sea/dsh-agent-teams-fish (profile)')
     else {
       const pkg = manifest(path)
       plugin = { version: pkg.version, path: dirname(path) }

@@ -108,8 +108,8 @@ test('doctor follows profile peers and rejects duplicate runtime identities', t 
   write(root, { name: '@deepseek-ai/dsh', version: '0.1.2-rc.1', dependencies: { '@deepseek-ai/dsh-agent': '0.1.2-rc.1' } })
   write(join(root, 'node_modules/@deepseek-ai/dsh-agent'), { name: '@deepseek-ai/dsh-agent', version: '0.1.2-rc.1' })
   const profile = join(root, 'profile')
-  write(join(profile, 'node_modules/dsh-agent-teams-fish'), {
-    name: 'dsh-agent-teams-fish', version: '0.1.16-rc.1', peerDependencies: { '@deepseek-ai/dsh-agent': '0.1.2-rc.1' },
+  write(join(profile, 'node_modules/@fish-under-sea/dsh-agent-teams-fish'), {
+    name: '@fish-under-sea/dsh-agent-teams-fish', version: '0.1.16-rc.1', peerDependencies: { '@deepseek-ai/dsh-agent': '0.1.2-rc.1' },
   })
   write(join(profile, 'node_modules/@deepseek-ai/dsh-agent'), { name: '@deepseek-ai/dsh-agent', version: '0.1.2-rc.1' })
   assert.match(inspectInstallation(root, profile).problems.join(), /Multiple resolved identities/)
@@ -152,8 +152,8 @@ test('doctor reports missing nonoptional Cordis peers and required plugin import
   assert.match(inspectInstallation(root).problems.join(), /Missing packages.*cordis/)
   write(join(root, 'node_modules/@deepseek-ai/cordis'), { name: '@deepseek-ai/cordis', version: '4.0.2' })
   const profile = join(root, 'profile')
-  write(join(profile, 'node_modules/dsh-agent-teams-fish'), {
-    name: 'dsh-agent-teams-fish', version: '0.1.16-rc.1',
+  write(join(profile, 'node_modules/@fish-under-sea/dsh-agent-teams-fish'), {
+    name: '@fish-under-sea/dsh-agent-teams-fish', version: '0.1.16-rc.1',
     peerDependencies: { '@deepseek-ai/dsh-subagent': policy.recommendedHost },
     peerDependenciesMeta: { '@deepseek-ai/dsh-subagent': { optional: true } },
   })
@@ -176,7 +176,7 @@ test('doctor detects peer-only drift and a mismatched installed plugin', t => {
   write(join(root, 'node_modules/@deepseek-ai/dsh-session'), { name: '@deepseek-ai/dsh-session', version: '0.1.2-rc.1' })
   assert.equal(inspectInstallation(root).ok, true)
   const profile = join(root, 'profile')
-  write(join(profile, 'node_modules/dsh-agent-teams-fish'), { name: 'dsh-agent-teams-fish', version: '0.1.15' })
+  write(join(profile, 'node_modules/@fish-under-sea/dsh-agent-teams-fish'), { name: '@fish-under-sea/dsh-agent-teams-fish', version: '0.1.15' })
   assert.match(inspectInstallation(root, profile).problems.join(), /0\.1\.15/)
 })
 

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createUserMessage, LlmAdapter, ToolCallId } from '@deepseek-ai/dsh-llm';
 
-const { startMember, drainMemberChildren } = await import(new URL('./harness-compat.js', import.meta.resolve('dsh-agent-teams-fish')));
+const { startMember, drainMemberChildren } = await import(new URL('./harness-compat.js', import.meta.resolve('@fish-under-sea/dsh-agent-teams-fish')));
 const requests = [], commands = [], gates = new Map(), memberResponses = new Map();
 let captainId, seq = 0;
 const model = { provider: 'runtime-lab', id: 'fixture-model', name: 'Stability fixture', context: { contextWindow: 262144 }, defaultMaxTokens: 8192 };
