@@ -1,16 +1,16 @@
 # @fish-under-sea/dsh-agent-teams-fish
 
-**1.0.0 · 持久团队协作与 Fish 厂商美术**
+**1.0.1 · 持久团队协作与 Fish 厂商美术**
 
 [English](README.en.md)
 
 ## 安装与兼容
 
 ```sh
-dsh plugin --profile <profile> add @fish-under-sea/dsh-agent-teams-fish@1.0.0
+dsh plugin --profile <profile> add @fish-under-sea/dsh-agent-teams-fish@1.0.1
 ```
 
-也由 `@fish-under-sea/dsh-fish@1.0.0` 提供，不要重复挂载。安装后重启 DSH。Node 要求 `^22.19.0 || >=24`。推荐宿主 `0.2.0-rc.2`；`0.2.1-rc.2` 为预览支持。精确支持列表以 [compatibility.json](compatibility.json) 为唯一事实源，不以桌面应用版本推断核心版本。
+也由 `@fish-under-sea/dsh-fish@1.0.1` 提供，不要重复挂载。安装后重启 DSH。Node 要求 `^22.19.0 || >=24`。推荐宿主 `0.2.0-rc.2`；`0.2.1-rc.2` 为预览支持。精确支持列表以 [compatibility.json](compatibility.json) 为唯一事实源，不以桌面应用版本推断核心版本。
 
 ## 功能
 
@@ -41,8 +41,9 @@ pnpm verify
 
 ## 来源与记录
 
-基于 [NanmiCoder/dsh-agent-teams](https://github.com/NanmiCoder/dsh-agent-teams) (原作者 Relakkes / 程序员阿江). MIT. 保留上游 README、NOTICE 和历史发布说明。1.0.0 统一包名与版本，不表示已合并上游最新 HEAD。
+基于 [NanmiCoder/dsh-agent-teams](https://github.com/NanmiCoder/dsh-agent-teams) (原作者 Relakkes / 程序员阿江). MIT. 保留上游 README、NOTICE 和历史发布说明。1.0.1 统一包名与版本，不表示已合并上游最新 HEAD。
 
+- [1.0.1](release-notes/v1.0.1.md)
 - [1.0.0](release-notes/v1.0.0.md)
 - [历史记录](https://github.com/Fish-under-sea/dsh-agent-teams-fish/tree/main/release-notes)
 - [NOTICE](NOTICE.md)
