@@ -102,12 +102,18 @@ export declare function readTeam(stateRoot: string, teamId: string): Promise<Tea
  * @returns the team record, or `undefined` when absent.
  */
 export declare function readTeamSync(stateRoot: string, teamId: string): TeamState | undefined;
+/** Pair a cancellation-sensitive team replacement with its live effect. */
+interface TeamWriteCommit {
+    signal: AbortSignal;
+    onCommit: () => void;
+}
 /**
  * Persist one team record (inside the caller's lock).
  * @param stateRoot - resolved absolute state root directory.
  * @param state - the record to persist.
+ * @param commit - gate and synchronous effect for a cancellation-sensitive replacement.
  */
-export declare function writeTeam(stateRoot: string, state: TeamState): Promise<void>;
+export declare function writeTeam(stateRoot: string, state: TeamState, commit?: TeamWriteCommit): Promise<void>;
 /** Synchronous role hydration before the host's first prompt assembly. */
 export declare function readRetiredMemberIdsSync(stateRoot: string): Set<string>;
 export declare function readRetiredMemberIds(stateRoot: string): Promise<Set<string>>;
@@ -241,9 +247,10 @@ export declare function readArchivedTeam(stateRoot: string, teamId: string): Pro
  */
 export declare function listArchivedTeamIds(stateRoot: string): Promise<string[]>;
 /** Visual task state for the activity panel. */
-export type VisualTaskState = 'blocked' | 'open' | 'running' | 'completed' | 'failed' | 'cancelled';
+export type VisualTaskState = 'blocked' | 'open' | 'claimed' | 'running' | 'completed' | 'failed' | 'cancelled';
 /**
- * The visual state of one task: `running` while in_progress, `completed`
+ * The visual state of one task: `claimed` after assignment, `running` only
+ * after the explicit in_progress update, `completed`
  * when done, `failed`/`cancelled` when terminal without success, `blocked`
  * while any dependency is unfinished, else `open`.
  */

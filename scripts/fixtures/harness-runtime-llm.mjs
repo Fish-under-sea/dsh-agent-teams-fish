@@ -34,8 +34,20 @@ class FixtureAdapter extends LlmAdapter {
             teamSchemaBytes: Buffer.byteLength(JSON.stringify(teamTools)), teamTools: teamTools.map(t => t.name) });
         record({ event: 'request', sessionId: options.sessionId, purpose: options.purpose, provider: options.provider, model: options.model, reasoningEffort: options.reasoningEffort, isMember, toolNames: (options.tools ?? []).map(t => t.name), called: names, lastToolText: toolText.slice(-12000), userText: userText.slice(-6000), userMessages: options.messages.filter(m => m.role === 'user').map(m => m.content.filter(b => b.type === 'text').map(b => b.text).join('\n')) });
         let chunks;
-        if (isMember && options.model === 'fixture-failing' && userText.includes('AgentTeams automatic task assignment'))
-            throw new LlmError('Runtime fixture rejected primary route', 'AUTH', { status: 401 });
+        if (isMember && options.model === 'fixture-failing' && userText.includes('AgentTeams automatic task assignment')) {
+            // In the fallback scenario, fail after the primary has already
+            // committed a tool effect to the open attempt.
+            if (process.env.LAB_SCENARIO !== 'fallback' || names.includes('agent_teams_update_task')) {
+                if (process.env.LAB_SCENARIO === 'fallback') {
+                    const team = JSON.parse(readFileSync(join(process.cwd(), '.agent-teams/runtime-lab/team.json'), 'utf8'));
+                    const task = team.tasks.find(task => task.id === 't1');
+                    if (task?.status !== 'in_progress' || !task.attemptId)
+                        throw Error('Fallback fixture requires the primary to have committed an open attempt');
+                    record({ event: 'fallback-primary-auth', sessionId: options.sessionId, attemptId: task.attemptId });
+                }
+                throw new LlmError('Runtime fixture rejected primary route', 'AUTH', { status: 401 });
+            }
+        }
         if (options.purpose)
             chunks = textChunks('Runtime lab');
         else if (!process.env.LAB_TEAMS)
@@ -57,8 +69,18 @@ class FixtureAdapter extends LlmAdapter {
             if (!userText.includes('AgentTeams automatic task assignment') && !userText.includes('COLD_WAKE_FIXTURE'))
                 chunks = textChunks('MEMBER_READY');
             else if (!names.includes('agent_teams_claim_task'))
-                chunks = call('agent_teams_claim_task', { task_id: 't1' });
+                chunks = call('agent_teams_claim_task', { task_id: 't1', ...(process.env.LAB_SCENARIO === 'progressive-entry' ? { assignee: '' } : {}) });
+            else if (process.env.LAB_SCENARIO === 'progressive-entry' && tools.filter(t => t.name === 'agent_teams_claim_task').length === 1)
+                chunks = call('agent_teams_claim_task', { task_id: 't1', assignee: 'worker' });
             else if (tools.filter(t => t.name === 'agent_teams_update_task').length < 2) {
+                if (process.env.LAB_SCENARIO === 'progressive-entry') {
+                    const claims = tools.filter(t => t.name === 'agent_teams_claim_task');
+                    const results = claims.map(t => blocks.find(b => b.type === 'tool-result' && b.toolCallId === t.id));
+                    const attempts = results.map(r => JSON.stringify(r).match(/attempt_id ([^,\s)]+)/)?.[1]);
+                    if (results.some(r => !r || r.isError) || attempts.length !== 2 || !attempts[0] || attempts[0] !== attempts[1])
+                        throw Error('Materialized blank/self claim must keep the same attempt capability');
+                    record({ event: 'materialized-claim-passed', sessionId: options.sessionId, attempt: attempts[0] });
+                }
                 const attempt = toolText.match(/attempt_id ([^,\s)]+)/)?.[1];
                 if (!attempt)
                     throw Error('Fixture could not read model-visible claim capability');
@@ -129,6 +151,8 @@ class FixtureAdapter extends LlmAdapter {
         }
         else if (process.env.LAB_SCENARIO === 'failure' && toolText.includes('AUTH'))
             chunks = textChunks('AGENTTEAMS_EXPECTED_FAILURE_OK');
+        else if (process.env.LAB_SCENARIO === 'fallback' && toolText.includes('AUTH'))
+            chunks = textChunks('FALLBACK_NOT_RECOVERED');
         else if (process.env.LAB_SCENARIO === 'lifecycle' && !tools.some(t => t.name === 'agent_teams_send_message' && t.arguments.includes('FIFO_FIRST'))) {
             for (let i = 0; i < 100 && !memberStarted; i++)
                 await new Promise(r => setTimeout(r, 20));

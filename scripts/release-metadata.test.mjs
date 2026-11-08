@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { releaseMetadata } from './release-metadata.mjs'
+import { assertReleaseTagTarget, releaseMetadata } from './release-metadata.mjs'
 import { policy, workspacePolicy } from './compatibility.mjs'
 
 const fixture = (version, tag) => ({
@@ -38,16 +38,29 @@ for (const suffix of ['alpha', 'beta', 'rc']) {
   })
 }
 
-test('reject unsupported versions and unbounded peers', () => {
+test('reject unsupported versions and bounded or listed peers', () => {
   for (const version of ['0.1.16-dev.1', '0.1.16-alpha.01', '0.1.16-alpha.1\n', 'v0.1.16', '0.1']) {
     assert.throws(() => releaseMetadata(fixture(version, 'next')))
   }
   const mixed = fixture('0.1.16-rc.1', 'next')
   mixed.peerDependencies['@deepseek-ai/dsh-agent'] = '^0.1.2-alpha.2'
-  assert.throws(() => releaseMetadata(mixed), /enumerate/)
+  assert.throws(() => releaseMetadata(mixed), /peer range must be \*/)
 })
 
 test('checked-in candidate has consistent dependency and release metadata', () => {
   const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
   assert.equal(releaseMetadata(pkg).dist_tag, pkg.publishConfig.tag)
+})
+
+test('a release can create its tag or reuse a tag at the verified commit', () => {
+  const version = '0.1.29'
+  const tag = `refs/tags/v${version}`
+  const commit = 'a'.repeat(40)
+  const other = 'b'.repeat(40)
+  const annotation = 'c'.repeat(40)
+  assertReleaseTagTarget(version, '', commit)
+  assertReleaseTagTarget(version, `${commit}\t${tag}\n`, commit)
+  assertReleaseTagTarget(version, `${annotation}\t${tag}\n${commit}\t${tag}^{}\n`, commit)
+  assert.throws(() => assertReleaseTagTarget(version, `${other}\t${tag}\n`, commit), /points to/)
+  assert.throws(() => assertReleaseTagTarget(version, `${annotation}\t${tag}\n${other}\t${tag}^{}\n`, commit), /points to/)
 })

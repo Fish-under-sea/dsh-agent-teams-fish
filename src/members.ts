@@ -13,13 +13,14 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { installModelSelection, type Agent, type ModelSelection } from '@deepseek-ai/dsh-agent'
+import { type Agent, type ModelSelection } from '@deepseek-ai/dsh-agent'
 // Declaration merge only: makes ctx.subagents visible.
 import { foldSubagentDescriptor } from '@deepseek-ai/dsh-subagent'
 import { createUserMessage, LlmError, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionId } from '@deepseek-ai/dsh-session'
+import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
-import { assertMemberModelSelection, guardSubagentCreation, guardSubagentDelivery, installContinuableMemberSetup, memberToolFilter, queueMemberPrompt, restrictableToolNames, startMember, startMemberWithLenientFilter, steerMemberPrompt, sessionOwnEvents } from './harness-compat.ts'
+import { agentTeamsSource, assertMemberModelSelection, observedSessionFormatVersion, outputLimitTurn, type SessionFormatBearer, guardSubagentCreation, installMemberModelSelection, startMember, usesManagedActivations, guardSubagentDelivery, installContinuableMemberSetup, memberToolFilter, queueMemberPrompt, restrictableToolNames, startMemberWithLenientFilter, steerMemberPrompt, sessionOwnEvents } from './harness-compat.ts'
 import { markMailboxDelivered, appendMailbox, CAPTAIN_KEY, createMessage, readRetiredMemberIds, readTeamSync, readTeam, releaseMailboxDelivery, withTeamLock, writeTeam } from './state.ts'
 import { mailboxPrompt } from './mailbox.ts'
 import { nearestLiveLead } from './lineage.ts'
@@ -158,53 +159,8 @@ export function composeMemberRoute(
   }
 }
 
-/**
- * 新版（preset-only）宿主不再声明 persona/toolFilter 能力位，改由插件在成员
- * 首个请求前自行安装；这里就是那份被安装的组合。
- */
-interface MemberComposition {
-  persona: string
-  toolFilter: MemberToolFilter
-}
-
-/** 拒绝损坏的历史策略，不把非法 allow/deny 当成无限制。 */
-function normalizeToolFilter(value: unknown): MemberToolFilter {
-  if (typeof value !== 'object' || value === null || !('deny' in value) || !Array.isArray(value.deny)
-    || value.deny.some((name: unknown) => typeof name !== 'string')
-    || ('allow' in value && (!Array.isArray(value.allow) || value.allow.some((name: unknown) => typeof name !== 'string')))
-    || Object.keys(value).some(key => key !== 'allow' && key !== 'deny')) {
-    throw new Error('agent-teams: invalid member composition toolFilter')
-  }
-  const filter = value as { deny: string[]; allow?: string[] }
-  return { deny: [...filter.deny], ...filter.allow === undefined ? {} : { allow: [...filter.allow] } }
-}
-
-/**
- * Rebuild the composition a preset-only host must install on cold resume.
- * `team.json` is the durable authority: the member record keeps the exact
- * filter the host accepted, and the persona is deterministic from the same
- * durable team/member fields the spawn used. A record without a filter is
- * refused instead of resumed with an unrestricted tool set.
- * @param team - the durable team owning the member.
- * @param memberName - the member identity decoded from the child label.
- * @param stateDir - configured state directory (part of the persona).
- * @param executionPrompt - plugin-wide execution prompt, a persona input.
- */
-function durableMemberComposition(
-  team: TeamState,
-  memberName: string,
-  stateDir: string,
-  executionPrompt?: string,
-): MemberComposition | undefined {
-  const member = team.members.find(item => item.name === memberName && item.status !== 'removed')
-  if (member?.toolFilter === undefined) return undefined
-  return { persona: memberPersona(team, member, stateDir, executionPrompt), toolFilter: normalizeToolFilter(member.toolFilter) }
-}
-
 /** Process-local bridge between spawn admission and synchronous child setup. */
 export interface MemberSelectionRuntime {
-  /** 已安装可拒绝创建的成员组合钩子，不能只略过宿主能力检查。 */
-  readonly scopedComposition?: true
   /** Trusted fresh-child admission, before the durable member id is written. */
   isPendingMember(agent: Agent): boolean
   /** Make one selection visible while Harness materializes the fresh child. */
@@ -213,7 +169,7 @@ export interface MemberSelectionRuntime {
     label: string,
     selection: MemberLlmSelection,
     operation: () => Promise<T>,
-    composition?: MemberComposition,
+    setup?: TeamMember['runtimeSetup'],
   ): Promise<T>
 }
 
@@ -246,7 +202,11 @@ export async function validateMemberLlmSelections(
 }
 
 const MEMBER_LABEL_PREFIX = 'agent-teams:'
-const FALLBACK_FAILURE_CODES = new Set(['QUOTA', 'RATE_LIMIT', 'AUTH', 'MISSING_CREDENTIAL', 'NO_ADAPTER'])
+const FALLBACK_FAILURE_CODES = new Set([
+  'QUOTA', 'RATE_LIMIT', 'AUTH', 'MISSING_CREDENTIAL', 'NO_ADAPTER',
+  // The account-backed DeepSeek adapter remaps equivalent provider failures.
+  'ACCOUNT_QUOTA', 'ACCOUNT_TOKEN_INVALID', 'ACCOUNT_SIGN_IN_REQUIRED',
+])
 
 export function isFallbackFailureCode(code: string): boolean {
   return FALLBACK_FAILURE_CODES.has(code)
@@ -266,11 +226,11 @@ export function selectFallbackRoute(
 }
 
 /** Deliver a durable member report to the live captain at its next model step. */
-export function steerCaptainReport(captain: Pick<Agent, 'steer'>, from: string, content: string, receipt?: string): boolean {
+export function steerCaptainReport(captain: Pick<Agent, 'steer'> & SessionFormatBearer, from: string, content: string, receipt?: string): boolean {
   try {
     captain.steer(createUserMessage({
       content: [{ type: 'text', text: receipt ?? `AgentTeams message from member ${from}:\n\n${content}` }],
-      source: { kind: 'agent-teams' },
+      source: agentTeamsSource({ kind: 'agent-teams' }, observedSessionFormatVersion(captain)),
     }))
     return true
   } catch {
@@ -282,6 +242,7 @@ interface FailedMemberAttempt {
   readonly captainSessionId: string
   readonly memberId: string
   readonly task?: Pick<TeamTask, 'id' | 'attempt' | 'attemptId'>
+  readonly openAttemptOnly?: boolean
 }
 
 /** How a final member turn failure relates to the durable record. */
@@ -325,6 +286,7 @@ export function classifyMemberFailure(
   if (member === undefined || member.id !== observed.memberId) return 'ignored'
   const task = current.task
   if (task === undefined) {
+    if (observed.openAttemptOnly === true) return 'ignored'
     // No open attempt is owned by this generation any more, so nothing here may
     // be mutated — but the failure itself must still be recorded. `working` is
     // NOT evidence of newer work: `syncMemberStatus` writes it as soon as the
@@ -420,6 +382,9 @@ export async function failMemberOpenAttempt(
     })
     if (disposition === 'ignored') return
     if (disposition === 'failed_attempt' && task !== undefined) {
+      // Historical records may lack a capability id. Bind this failure report
+      // to the terminal attempt so a later retry invalidates unread mail.
+      if (observed.openAttemptOnly === true) task.attemptId ??= randomUUID()
       task.status = 'failed'
       task.output = summary
       task.updatedAt = Date.now()
@@ -434,6 +399,9 @@ export async function failMemberOpenAttempt(
       : undefined
     const message = {
       ...createMessage(memberName, CAPTAIN_KEY, memberFailureMessage(memberName, summary, disposition, task, settledRecord)),
+      ...observed.openAttemptOnly === true && task?.attemptId !== undefined
+        ? { sourceTaskId: task.id, sourceAttemptId: task.attemptId, sourceTaskStatus: 'failed' as const }
+        : {},
       deliveryClaimedAt: Date.now(),
     }
     if (disposition === 'failed_attempt') await writeTeam(stateRoot, team)
@@ -464,24 +432,38 @@ export async function failMemberOpenAttempt(
   return true
 }
 
-async function updateFallbackState(
+async function commitFallbackRoute(
   stateRoot: string,
   teamId: string,
   memberName: string,
+  child: Agent,
   fallback: { provider: string; model: string },
+  signal: AbortSignal,
   ctx: Context,
-): Promise<void> {
-  await withTeamLock(`team:${stateRoot}:${teamId}`, async () => {
+  activate: () => void,
+): Promise<boolean> {
+  return withTeamLock(`team:${stateRoot}:${teamId}`, async () => {
     const team = await readTeam(stateRoot, teamId)
-    if (team === undefined) return
-    const member = team.members.find(candidate => candidate.name === memberName)
-    if (member === undefined) return
+    if (signal.aborted || team === undefined || team.captainSessionId !== child.session.header.parentSession || team.halted === true) return false
+    const member = team.members.find(candidate => candidate.name === memberName && candidate.id === child.id)
+    if (member === undefined || member.status === 'removed' || member.stopping === true) return false
     member.activeProvider = fallback.provider
     member.activeModel = fallback.model
     member.fallbackActive = true
-    await writeTeam(stateRoot, team)
+    let committed = false
+    const onCommit = (): void => {
+      committed = true
+      activate()
+    }
+    try {
+      await writeTeam(stateRoot, team, { signal, onCommit })
+    } catch (error: unknown) {
+      if (committed) throw error
+      ctx.logger.warn(`agent-teams: failed to persist fallback route: ${String(error)}`)
+      if (!signal.aborted) onCommit()
+    }
+    return committed
   })
-  void ctx
 }
 
 function pendingSelectionKey(parentSessionId: string, label: string): string {
@@ -688,19 +670,14 @@ function describeMemberRouteFailure(provider: string, model: string, error: unkn
  * cold resume restores the same selection from the owning team's durable
  * record. Legacy members without a complete saved route retain Harness's
  * descriptor provider/model behavior.
- * @param ctx - the plugin context (injects `subagents`).
- * @param stateDir - configured state directory, read for cold-resume snapshots.
- * @param onFailureSettled - settlement hook after a member turn failure.
- * @param executionPrompt - plugin-wide execution prompt (a persona input).
  */
 export function installMemberSelectionRuntime(
   ctx: Context,
   stateDir: string,
   onFailureSettled?: (workspace: string, teamId: string, memberName: string) => Promise<void>,
-  executionPrompt?: string,
 ): MemberSelectionRuntime {
   const pending = new Map<string, MemberLlmSelection>()
-  const compositions = new Map<string, MemberComposition>()
+  const pendingSetup = new Map<string, NonNullable<TeamMember['runtimeSetup']>>()
   installContinuableMemberSetup(ctx, (childCtx, child) => {
     const descriptor = foldSubagentDescriptor(sessionOwnEvents(child.session))
     if (descriptor?.mode !== 'continuable' || !descriptor.label.startsWith(MEMBER_LABEL_PREFIX)) {
@@ -717,47 +694,6 @@ export function installMemberSelectionRuntime(
     const workspace = child.session.header.cwd ?? process.cwd()
     const stateRoot = join(workspace, stateDir)
     const key = pendingSelectionKey(parentSessionId, descriptor.label)
-    const runtimeCapabilities = ctx.subagents.getProvider?.(descriptor.provider)?.capabilities as
-      { agentPreset?: boolean; persona?: boolean; toolFilter?: boolean } | undefined
-    // A preset-only host advertises only `agentPreset`/`agentOptions`/... and
-    // therefore cannot apply the persona or the tool filter from the start
-    // request. The plugin owns both: it installs them here, before the first
-    // request, for a fresh child and for every cold resume.
-    const presetOnly = runtimeCapabilities?.agentPreset === true
-      && runtimeCapabilities.persona === undefined && runtimeCapabilities.toolFilter === undefined
-    const emptyComposition = (): void => undefined
-    let disposeComposition = emptyComposition
-    if (presetOnly) {
-      // The in-memory snapshot exists only while the spawn is materializing;
-      // a cold resume rebuilds the same composition from durable team.json.
-      const durable = readTeamSync(stateRoot, teamId)
-      const composition = compositions.get(key)
-        ?? (durable?.captainSessionId === parentSessionId
-          ? durableMemberComposition(durable, memberName, stateDir, executionPrompt)
-          : undefined)
-      if (composition === undefined) {
-        throw new Error(
-          `agent-teams: member "${memberName}" has no durable composition snapshot (tool filter) in team.json, `
-          + 'so this preset-only host cannot resume it with the intended persona and tool isolation; re-add the member',
-        )
-      }
-      const releaseFilter = childCtx.tools.restrict(composition.toolFilter)
-      try {
-        const releasePersona = childCtx.systemPrompt.section({
-          name: 'deployment:persona-prefix',
-          order: childCtx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
-          text: composition.persona,
-        })
-        let disposed = false
-        disposeComposition = () => {
-          if (disposed) return
-          disposed = true
-          releasePersona()
-          releaseFilter()
-        }
-        childCtx.effect(() => disposeComposition, 'agent-teams: member composition')
-      } catch (error) { disposeComposition(); if (disposeComposition === emptyComposition) releaseFilter(); throw error }
-    }
     // Internal settlement wakeups bypass the public delivery guard. Recheck
     // exact durable membership on every proposed step, including cold resume.
     const disposeAdmission = childCtx.on('agent/pre-step', async (payload, next) => {
@@ -771,10 +707,38 @@ export function installMemberSelectionRuntime(
       if (!admitted) return { kind: 'reject' }
       return next()
     })
+    // New activations no longer persist persona/toolFilter in host descriptors.
+    // Install them before the first request, and restore the exact saved values
+    // after a cold resume. Historical descriptors remain owned by Harness.
+    const savedTeam = pending.has(key) ? undefined : readTeamSync(stateRoot, teamId)
+    const savedMember = savedTeam?.captainSessionId === parentSessionId
+      ? savedTeam.members.find(member => member.id === child.id && member.name === memberName)
+      : undefined
+    const setup = pendingSetup.get(key) ?? savedMember?.runtimeSetup
+    if (usesManagedActivations(ctx.subagents) && savedMember !== undefined
+      && setup === undefined && descriptor.toolFilter === undefined) {
+      disposeAdmission()
+      throw new Error('agent-teams: saved member runtime setup is missing; refusing an unrestricted resume')
+    }
+    let disposeSetup = (): void => undefined
+    if (usesManagedActivations(ctx.subagents) && setup !== undefined) {
+      try {
+        const stopFilter = childCtx.tools.restrict(setup.toolFilter)
+        try {
+          const stopPersona = childCtx.systemPrompt.section({
+            name: 'deployment:persona-prefix',
+            order: childCtx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
+            text: setup.persona,
+          })
+          disposeSetup = () => { stopPersona(); stopFilter() }
+        } catch (error) { stopFilter(); throw error }
+      } catch (error) { disposeAdmission(); throw error }
+    }
+    const cleanupAdmission = (): void => { disposeSetup(); disposeAdmission() }
     let selection = pending.get(key)
     if (selection === undefined) {
       const team = readTeamSync(stateRoot, teamId)
-      if (team?.captainSessionId !== parentSessionId) return () => { disposeAdmission(); disposeComposition() }
+      if (team?.captainSessionId !== parentSessionId) return cleanupAdmission
       const durableMember = team.members.find(member => member.name === memberName)
       selection = selectionFromMember(durableMember)
       if (selection !== undefined && (descriptor.agentProvider !== durableMember?.provider || descriptor.agentModel !== durableMember?.model)) {
@@ -784,31 +748,30 @@ export function installMemberSelectionRuntime(
       }
     }
 
-    let lastFailedTurn: number | undefined
-    // Harness emits agent/error only after request recovery is exhausted. In
-    // particular, llm-retry's "always" policy calls downstream request-error
-    // listeners before it retries; that waterfall cannot declare a turn dead.
-    const disposeFailure = childCtx.on('agent/error', async (payload) => {
-      if (payload.agent.id !== child.id || payload.turn === lastFailedTurn) return
-      lastFailedTurn = payload.turn
+    const observeFailedAttempt = (): FailedMemberAttempt | undefined => {
       try {
-        // Capture the attempt synchronously at the event, before any lock wait
-        // can let a captain reassign it or replace the member/team generation.
+        // Capture the capability synchronously, before a handoff or lock wait
+        // can move the member to another task attempt.
         const snapshot = readTeamSync(stateRoot, teamId)
         if (snapshot?.captainSessionId !== parentSessionId) return
         const member = snapshot.members.find(item => item.id === child.id && item.name === memberName && item.status !== 'removed')
         if (member === undefined) return
         const task = snapshot.tasks.find(item => item.assignee === memberName
           && (item.status === 'claimed' || item.status === 'in_progress'))
-        const failure = payload.error instanceof LlmError ? payload.error.failure : {
-          code: 'UNKNOWN',
-          message: payload.error instanceof Error ? payload.error.message : String(payload.error),
-        }
-        const recorded = await failMemberOpenAttempt(ctx, stateRoot, teamId, memberName, failure, child.session, {
-          captainSessionId: parentSessionId, memberId: child.id, task,
-        })
+        return { captainSessionId: parentSessionId, memberId: child.id, task }
+      } catch (error: unknown) {
+        ctx.logger.warn(`agent-teams: failed to observe member turn failure: ${String(error)}`)
+      }
+    }
+
+    let lastFailedTurn: number | undefined
+    const recordFailure = async (turn: number, failure: { code: string; message: string }, observed: FailedMemberAttempt): Promise<void> => {
+      if (turn === lastFailedTurn) return
+      lastFailedTurn = turn
+      try {
+        const recorded = await failMemberOpenAttempt(ctx, stateRoot, teamId, memberName, failure, child.session, observed)
         if (!recorded) return
-        // The final-error event precedes driver quiescence. Observe the real
+        // The failure event precedes driver quiescence. Observe the real
         // lifecycle and kick explicitly even if its idle event was missed.
         // Never force an active Agent's status to idle or retry the failed task.
         await child.whenIdle()
@@ -825,44 +788,107 @@ export function installMemberSelectionRuntime(
       } catch (error: unknown) {
         ctx.logger.warn(`agent-teams: failed to record member turn failure: ${String(error)}`)
       }
+    }
+
+    // Harness emits agent/error only after request recovery is exhausted. In
+    // particular, llm-retry's "always" policy calls downstream request-error
+    // listeners before it retries; that waterfall cannot declare a turn dead.
+    const disposeFailure = childCtx.on('agent/error', (payload) => {
+      if (payload.agent.id !== child.id || payload.turn === lastFailedTurn) return
+      const observed = observeFailedAttempt()
+      if (observed === undefined) return
+      const failure = payload.error instanceof LlmError ? payload.error.failure : {
+        code: 'UNKNOWN',
+        message: payload.error instanceof Error ? payload.error.message : String(payload.error),
+      }
+      return recordFailure(payload.turn, failure, observed)
     })
+
+    let cappedAttempt: { turn: number; observed: FailedMemberAttempt } | undefined
+    const disposeOutputLimit = childCtx.on('session/event', (session, event) => {
+      if (session !== child.session) return
+      // The host's turn reason stays max-tokens even if fresh steering runs
+      // another step. Only the last executed step can leave an attempt stuck.
+      if (event.type === 'step/start') cappedAttempt = undefined
+      const turn = outputLimitTurn(event)
+      if (turn !== undefined) {
+        const observed = observeFailedAttempt()
+        if (observed?.task !== undefined) cappedAttempt = { turn, observed }
+      }
+      if (event.type !== 'turn/end') return
+      const capped = cappedAttempt
+      cappedAttempt = undefined
+      if (capped?.turn !== event.data.turn || event.data.reason?.kind !== 'max-tokens') return
+      return recordFailure(capped.turn, {
+        code: 'MAX_TOKENS',
+        message: 'Model output-token limit reached before the member closed this task',
+      }, { ...capped.observed, openAttemptOnly: true })
+    })
+
+    const cleanupFailure = (): void => { disposeOutputLimit(); disposeFailure(); cleanupAdmission() }
     // Legacy teams still need failure reporting even without a saved route.
-    if (selection === undefined) return () => { disposeFailure(); disposeAdmission(); disposeComposition() }
+    if (selection === undefined) return cleanupFailure
     const selectionRef = { current: modelSelection(selection), assembled: undefined as ModelSelection | undefined }
-    const disposeSelection = installModelSelection(childCtx, selectionRef)
+    // Newer Harness owns the next-step selection in the Agent's durable model
+    // API. Its installModelSelection hook now only contributes switch notices.
+    const model = (child as Agent & { model?: { select(selection: Readonly<ModelSelection>): void } }).model
+    const nativeModel = typeof model?.select === 'function' ? model : undefined
+    nativeModel?.select(selectionRef.current)
+    const disposeSelection = installMemberModelSelection(childCtx, selectionRef)
     const fallback = selection.fallback
     let switched = false
+    const recoveryLifetime = new AbortController()
     const disposeFallback = childCtx.on('agent/request-error', async (payload, next) => {
-      if (payload.agent.id !== child.id || payload.signal.aborted) return next()
-      const transition = selectFallbackRoute(selectionRef.current ?? { provider: selection.provider, model: selection.model }, fallback, payload.failure.code, switched)
-      // selectFallbackRoute only retries when a fallback route exists; the
-      // explicit guard narrows that fact for the compiler.
-      if (fallback !== undefined && transition.retry) {
+      if (payload.agent.id !== child.id) return next()
+      const transition = selectFallbackRoute(selectionRef.current, fallback, payload.failure.code, switched)
+      if (fallback === undefined || !transition.retry) return next()
+      // The turn can survive plugin unload. Stop any queued recovery when
+      // this child setup is disposed while waiting for the team lock.
+      const signal = AbortSignal.any([payload.signal, recoveryLifetime.signal])
+      if (signal.aborted) return next()
+      const committed = await commitFallbackRoute(stateRoot, teamId, memberName, child, fallback, signal, ctx, () => {
         switched = transition.switched
         selectionRef.current = transition.selection
-        // Request recovery repeats buildRequest inside the current step; it
-        // does not re-run prompt assembly. Override that captured route too,
-        // otherwise the authorized retry would hit the failed primary again.
-        selectionRef.assembled = transition.selection
-        await updateFallbackState(stateRoot, teamId, memberName, fallback, ctx).catch((error: unknown) => {
-          ctx.logger.warn(`agent-teams: failed to persist fallback route: ${String(error)}`)
-        })
         ctx.logger.warn(`agent-teams: member ${child.id} switching to fallback ${fallback.provider}/${fallback.model} after ${payload.failure.code}`)
-        return { kind: 'retry' as const }
-      }
-      return next()
+        if (nativeModel === undefined) {
+          // Legacy recovery rebuilds the request without rerunning assembly.
+          selectionRef.assembled = transition.selection
+          return
+        }
+
+        // Modern recovery fixes the route for all retries of a prepared step.
+        // Close that step without failing its task, then wake the same member in
+        // a new turn. The assignment and any completed calls are already in its
+        // session history, so there is no task retry or replay of input.
+        nativeModel.select(transition.selection)
+        const continuation = createUserMessage({
+          content: [{ type: 'text', text: 'AgentTeams switched to the configured fallback model. Continue the current work from the conversation history and recorded task state.' }],
+          source: agentTeamsSource({ kind: 'agent-teams' }, observedSessionFormatVersion(child)),
+        })
+        if (signal.aborted) return
+        child.cancel({ kind: 'hook', reason: 'agent-teams/model-fallback' }, { keepInbox: true })
+        try {
+          child.followup(continuation)
+        } catch (error) {
+          // Cancellation suppresses the host's agent/error event, so a rejected
+          // continuation still needs to settle the observed attempt.
+          const observed = observeFailedAttempt()
+          if (observed !== undefined) void recordFailure(payload.turn, payload.failure, observed)
+          throw error
+        }
+      })
+      if (!committed) return next()
+      return nativeModel === undefined ? { kind: 'retry' as const } : undefined
     })
     return () => {
+      recoveryLifetime.abort()
       disposeFallback()
       disposeSelection()
-      disposeFailure()
-      disposeAdmission()
-      disposeComposition()
+      cleanupFailure()
     }
   })
 
   return {
-    scopedComposition: true,
     isPendingMember(agent) {
       const parent = agent.session.header.parentSession
       const descriptor = foldSubagentDescriptor(sessionOwnEvents(agent.session))
@@ -874,19 +900,19 @@ export function installMemberSelectionRuntime(
       label: string,
       selection: MemberLlmSelection,
       operation: () => Promise<T>,
-      composition?: MemberComposition,
+      setup?: TeamMember['runtimeSetup'],
     ): Promise<T> {
       const key = pendingSelectionKey(parentSessionId, label)
       if (pending.has(key)) {
         throw new Error(`member model selection is already pending for "${label}"`)
       }
       pending.set(key, selection)
-      if (composition !== undefined) compositions.set(key, composition)
+      if (setup !== undefined) pendingSetup.set(key, setup)
       try {
         return await operation()
       } finally {
         pending.delete(key)
-        compositions.delete(key)
+        pendingSetup.delete(key)
       }
     },
   }
@@ -1015,14 +1041,11 @@ export async function spawnMember(
   if (provider.prepareContinuable === undefined) {
     throw new Error(`agent-teams: provider "${config.provider}" does not support continuable members`)
   }
-  const capabilities = provider.capabilities as { persona?: boolean; toolFilter?: boolean; agentPreset?: boolean }
-  const scoped = capabilities.persona === undefined && capabilities.toolFilter === undefined
-    && capabilities.agentPreset === true && selections.scopedComposition === true
-    && typeof (ctx.subagents as unknown as { startActivation?: unknown }).startActivation === 'function'
-  if (!scoped && !capabilities.persona) {
+  const legacyCapabilities = provider.capabilities as unknown as { persona?: boolean; toolFilter?: boolean }
+  if (!usesManagedActivations(ctx.subagents) && !legacyCapabilities.persona) {
     throw new Error(`agent-teams: provider "${config.provider}" cannot apply a member persona`)
   }
-  if (!scoped && !capabilities.toolFilter) {
+  if (!usesManagedActivations(ctx.subagents) && !legacyCapabilities.toolFilter) {
     throw new Error(`agent-teams: provider "${config.provider}" cannot restrict captain-only tools for members`)
   }
   const label = `${MEMBER_LABEL_PREFIX}${team.id}:${member.name}`
@@ -1030,44 +1053,50 @@ export async function spawnMember(
   // captain-only deny list plus the depth entries this host registers.
   const requestedFilter = resolvedFilter ?? memberToolFilter(config.maxDepth, restrictableToolNames(captain))
   // The lenient retry may drop names this host reports unknown; keep the exact
-  // filter the host accepted so team.json and the child descriptor agree.
+  // filter the host accepted for the durable member setup.
   let acceptedFilter = requestedFilter
-  const composition: MemberComposition = { persona: memberPersona(team, member, stateDir, config.executionPrompt), toolFilter: requestedFilter }
-  const start = await selections.withPending(captain.id, label, llmSelection, () => (
-    startMemberWithLenientFilter(
-      toolFilter => {
-        acceptedFilter = toolFilter
-        composition.toolFilter = toolFilter
-        return startMember(ctx.subagents, {
-          provider: config.provider,
-          label,
-          request: {
-            prompt: [{ type: 'text', text: initialPrompt ?? memberWelcome(team, member.name) }],
-            parent: captain,
-            ...scoped ? {} : { persona: composition.persona, toolFilter },
-            agentOptions: {
-              provider: llmSelection.provider,
-              model: llmSelection.model,
-              ...llmSelection.reasoningEffort === undefined
-                ? {}
-                : { reasoningEffort: ReasoningEffortId(llmSelection.reasoningEffort) },
-            },
-            // Harness request.maxDepth caps the absolute depth of THIS creation;
-            // it is not inherited by later delegations. The guard below enforces
-            // the configured member-relative descendant budget instead.
+  const start = await startMemberWithLenientFilter(
+    toolFilter => {
+      acceptedFilter = toolFilter
+      const setup = { persona: memberPersona(team, member, stateDir, config.executionPrompt), toolFilter }
+      return selections.withPending(captain.id, label, llmSelection, () => startMember(ctx.subagents, {
+        provider: config.provider,
+        label,
+        request: {
+          prompt: [{ type: 'text', text: initialPrompt ?? memberWelcome(team, member.name) }],
+          parent: captain,
+          persona: memberPersona(team, member, stateDir, config.executionPrompt),
+          // Depth deny entries name host tools; resolve them against the
+          // running host's registry so a renamed delegation tool cannot abort
+          // the spawn (see memberToolFilter). Depth is still enforced by the
+          // parent-chain guard installed at plugin mount. A filter the host
+          // still rejects is retried without the names it reported.
+          toolFilter,
+          agentOptions: {
+            provider: llmSelection.provider,
+            model: llmSelection.model,
+            ...llmSelection.reasoningEffort === undefined
+              ? {}
+              : { reasoningEffort: ReasoningEffortId(llmSelection.reasoningEffort) },
           },
-          signal,
-        })
-      },
-      requestedFilter,
-      relaxableDeny,
-    )
-  ), scoped ? composition : undefined)
+          // Harness request.maxDepth caps the absolute depth of THIS creation;
+          // it is not inherited by later delegations. The guard below enforces
+          // the configured member-relative descendant budget instead.
+        },
+        signal,
+      }), setup)
+    },
+    requestedFilter,
+    relaxableDeny,
+  )
   member.id = start.childId
-  // `team.json` keeps the exact accepted filter for every member: on a
-  // preset-only host it is the only durable authority a cold resume can
-  // reinstall the tool isolation from (the descriptor does not carry it).
-  member.toolFilter = { ...acceptedFilter }
+  if (usesManagedActivations(ctx.subagents)) {
+    member.runtimeSetup = { persona: memberPersona(team, member, stateDir, config.executionPrompt), toolFilter: acceptedFilter }
+  }
+  // Only a policy member carries a persisted filter snapshot; a member without
+  // a policy keeps its public record shape. Legacy descriptors or runtimeSetup
+  // restore the filter on cold resume, depending on the host generation.
+  if (member.toolFilter !== undefined) member.toolFilter = { ...acceptedFilter }
 }
 
 /**
@@ -1142,7 +1171,9 @@ export function installRetiredMemberGuard(ctx: Context, stateDir: string): void 
 
 /** Bound all descendant creation, including renamed tools and code-runtime calls. */
 export function installMemberDelegationGuard(ctx: Context, stateDir: string, maxDepth: number): void {
+  let active = true
   const check = (parent: Agent): void => {
+    if (!active) return
     let ancestor: Agent | undefined = parent
     let depth = 1
     while (ancestor !== undefined) {
@@ -1170,6 +1201,7 @@ export function installMemberDelegationGuard(ctx: Context, stateDir: string, max
     }
   }
   guardSubagentCreation(ctx, check)
+  ctx.effect(() => () => { active = false }, 'agent-teams: delegation guard lifetime')
 }
 
 /**

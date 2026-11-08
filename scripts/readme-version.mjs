@@ -14,7 +14,7 @@ const README_FILES = ['README.md', 'README.en.md']
 // historic by design and will differ from this package's own version, so it is
 // allowed to appear verbatim; every OTHER retired version must stay inside a
 // release-notes link.
-const UPSTREAM_BASELINE_VERSIONS = ['0.1.22']
+const UPSTREAM_BASELINE_VERSIONS = ['0.1.29']
 
 // A README may name only the version being released. Older plugin versions stay
 // reachable through their own release-notes links, which every check strips first.
@@ -59,7 +59,8 @@ export function checkReadmeVersions({ version, known, files }) {
       problems.push(`${name} still names ${stale.version} outside a release-notes link`)
     }
     for (const pinned of findPinnedInstallVersions(markdown)) {
-      if (pinned !== version) {
+// The stable channel requests an update without pinning a numeric version.
+      if (pinned !== version && pinned !== 'latest') {
         problems.push(`${name} pins dsh-agent-teams-fish@${pinned} but the package is ${version}`)
       }
     }

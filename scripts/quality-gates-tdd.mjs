@@ -994,7 +994,7 @@ console.log('quality-gates TDD — tool-level closed loop')
       listeners.set(name, current)
       return () => listeners.set(name, current.filter((item) => item !== listener))
     },
-    agents: { get(id) { return liveAgents.get(id) } },
+    agents: { list: () => [], get(id) { return liveAgents.get(id) } },
     llm: {
       async resolveCallConfig(config) { return config },
       async listModels() { return [] },

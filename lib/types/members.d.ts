@@ -14,6 +14,7 @@
 import type { Context } from '@deepseek-ai/cordis';
 import { type Agent } from '@deepseek-ai/dsh-agent';
 import type { Session } from '@deepseek-ai/dsh-session';
+import { type SessionFormatBearer } from './harness-compat.ts';
 import type { MemberToolFilter } from './tool-policies.ts';
 import { type TeamMember, type TeamState, type TeamTask } from './types.ts';
 /** Persona snapshot of a profile protocol; the full text lives on team.json. */
@@ -120,22 +121,12 @@ export declare function composeMemberRoute(request: Pick<MemberLlmSelectionReque
     readonly provider: string;
     readonly model: string;
 }): MemberRouteResolution | undefined;
-/**
- * 新版（preset-only）宿主不再声明 persona/toolFilter 能力位，改由插件在成员
- * 首个请求前自行安装；这里就是那份被安装的组合。
- */
-interface MemberComposition {
-    persona: string;
-    toolFilter: MemberToolFilter;
-}
 /** Process-local bridge between spawn admission and synchronous child setup. */
 export interface MemberSelectionRuntime {
-    /** 已安装可拒绝创建的成员组合钩子，不能只略过宿主能力检查。 */
-    readonly scopedComposition?: true;
     /** Trusted fresh-child admission, before the durable member id is written. */
     isPendingMember(agent: Agent): boolean;
     /** Make one selection visible while Harness materializes the fresh child. */
-    withPending<T>(parentSessionId: string, label: string, selection: MemberLlmSelection, operation: () => Promise<T>, composition?: MemberComposition): Promise<T>;
+    withPending<T>(parentSessionId: string, label: string, selection: MemberLlmSelection, operation: () => Promise<T>, setup?: TeamMember['runtimeSetup']): Promise<T>;
 }
 /**
  * Validate a resolved roster against every provider catalog before any child
@@ -161,11 +152,12 @@ export declare function selectFallbackRoute(current: {
     };
 };
 /** Deliver a durable member report to the live captain at its next model step. */
-export declare function steerCaptainReport(captain: Pick<Agent, 'steer'>, from: string, content: string, receipt?: string): boolean;
+export declare function steerCaptainReport(captain: Pick<Agent, 'steer'> & SessionFormatBearer, from: string, content: string, receipt?: string): boolean;
 interface FailedMemberAttempt {
     readonly captainSessionId: string;
     readonly memberId: string;
     readonly task?: Pick<TeamTask, 'id' | 'attempt' | 'attemptId'>;
+    readonly openAttemptOnly?: boolean;
 }
 /** How a final member turn failure relates to the durable record. */
 export type MemberFailureDisposition = 
@@ -249,12 +241,8 @@ export declare function resolveMemberLlmSelection(ctx: Context, captain: Agent, 
  * cold resume restores the same selection from the owning team's durable
  * record. Legacy members without a complete saved route retain Harness's
  * descriptor provider/model behavior.
- * @param ctx - the plugin context (injects `subagents`).
- * @param stateDir - configured state directory, read for cold-resume snapshots.
- * @param onFailureSettled - settlement hook after a member turn failure.
- * @param executionPrompt - plugin-wide execution prompt (a persona input).
  */
-export declare function installMemberSelectionRuntime(ctx: Context, stateDir: string, onFailureSettled?: (workspace: string, teamId: string, memberName: string) => Promise<void>, executionPrompt?: string): MemberSelectionRuntime;
+export declare function installMemberSelectionRuntime(ctx: Context, stateDir: string, onFailureSettled?: (workspace: string, teamId: string, memberName: string) => Promise<void>): MemberSelectionRuntime;
 /**
  * The member's system prompt (persona), shadowing the deployment persona for
  * that child. Self-contained: it replaces the whole persona section.

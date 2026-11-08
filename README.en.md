@@ -1,16 +1,16 @@
 # @fish-under-sea/dsh-agent-teams-fish
 
-**1.0.2 · Durable teams with Fish vendor artwork**
+**1.1.0 · Upstream v0.1.29 synced · Durable teams with Fish vendor artwork**
 
 [简体中文](README.md)
 
 ## Installation and Compatibility
 
 ```sh
-dsh plugin --profile <profile> add @fish-under-sea/dsh-agent-teams-fish@1.0.2
+dsh plugin --profile <profile> add @fish-under-sea/dsh-agent-teams-fish@1.1.0
 ```
 
-Also included in `@fish-under-sea/dsh-fish@1.0.2`; do not mount twice. Restart DSH after installation. Requires Node `^22.19.0 || >=24`. Recommended Host: `0.2.0-rc.2`; `0.2.1-rc.2` is preview-supported. [compatibility.json](compatibility.json) is the exact support authority; desktop and core versions are distinct.
+Also included in `@fish-under-sea/dsh-fish`; do not mount twice. Restart DSH after installation. Requires Node `>=24.9`. Recommended Host: `0.2.2-rc.1`; older targets such as `0.2.1-rc.2` and `0.2.1-alpha.2` remain supported. [compatibility.json](compatibility.json) is the exact support authority; desktop and core versions are distinct.
 
 ## Features
 
@@ -41,8 +41,9 @@ The `dsh-agent-teams-doctor` command inspects manifests and dependency closure o
 
 ## Attribution and History
 
-Based on [NanmiCoder/dsh-agent-teams](https://github.com/NanmiCoder/dsh-agent-teams) (original author Relakkes / 程序员阿江). MIT. Upstream READMEs, NOTICE and release history are preserved. 1.0.2 coordinates identity and version; it does not claim the latest upstream HEAD is merged.
+Based on [NanmiCoder/dsh-agent-teams](https://github.com/NanmiCoder/dsh-agent-teams) (original author Relakkes / 程序员阿江). MIT. Upstream READMEs, NOTICE and release history are preserved. 1.1.0 coordinates identity and version, and the source baseline now follows upstream tag v0.1.29 (commit 369c278).
 
+- [1.1.0](release-notes/v1.1.0.md)
 - [1.0.2](release-notes/v1.0.2.md)
 - [1.0.1](release-notes/v1.0.1.md)
 - [1.0.0](release-notes/v1.0.0.md)

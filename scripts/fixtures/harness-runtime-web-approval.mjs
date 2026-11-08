@@ -6,6 +6,8 @@
  */
 import assert from 'node:assert/strict';
 import { appendFileSync, readFileSync } from 'node:fs';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { createUserMessage, LlmAdapter, ToolCallId } from '@deepseek-ai/dsh-llm';
@@ -30,6 +32,61 @@ function call(name, args) {
     return [{ type: 'block-start', index: 0, blockType: 'tool-call' }, { type: 'tool-call-delta', index: 0, id, name, argumentsDelta: arguments_ }, { type: 'block-end', index: 0, block: { type: 'tool-call', id, name, arguments: arguments_ } }, { type: 'usage', usage: { inputTokens: 10, outputTokens: 3 } }, { type: 'finish', reason: { kind: 'tool-calls' } }];
 }
 function sha256(value) { return createHash('sha256').update(value).digest('hex'); }
+/** A persisted reviewed revision consumed through the real authenticated route. */
+async function verifyWorkspaceAudit(baseUrl, cookie, captainSessionId) {
+    const path = 'audit-336/mask.bin', file = join(process.cwd(), path);
+    fs.mkdirSync(join(process.cwd(), 'audit-336'), { recursive: true });
+    const bytes = Buffer.alloc(128 * 1024, 65);
+    fs.writeFileSync(file, bytes);
+    const old = new Date(Date.now() - 10000);
+    fs.utimesSync(file, old, old);
+    const stats = fs.statSync(file), now = Date.now();
+    const team = {
+        id: 'audit-336', name: 'audit-336', captainSessionId, createdAt: now, taskSeq: 2, members: [],
+        tasks: [
+            { id: 't1', subject: 'Generate mask', kind: 'implementation', status: 'completed', dependencies: [], createdAt: now, updatedAt: now, attempt: 1, objective: 'Generate mask', inScope: ['audit-336/'], verify: ['generate mask'], acceptance: ['mask exists'], changedPaths: [path], acceptanceResults: [{ criterion: 'mask exists', status: 'passed' }], commandsRun: [{ command: 'generate mask', status: 'passed', exitCode: 0 }] },
+            { id: 't2', subject: 'Review mask', kind: 'review', status: 'completed', dependencies: ['t1'], createdAt: now, updatedAt: now, attempt: 1, verdict: 'pass', reviewedTaskId: 't1', reviewedAttempt: 1, objective: 'Review mask', acceptance: ['no blockers'], reviewedArtifacts: [{ path, present: true, sha256: sha256(bytes), size: bytes.length, mtimeMs: stats.mtimeMs }], reviewedScope: ['audit-336/'] },
+        ],
+    };
+    const dir = join(process.cwd(), '.agent-teams', team.id);
+    fs.mkdirSync(join(dir, 'inbox'), { recursive: true });
+    const statePath = join(dir, 'team.json'), stateBytes = JSON.stringify(team);
+    fs.writeFileSync(statePath, stateBytes);
+    const original = { openSync: fs.openSync, readSync: fs.readSync, closeSync: fs.closeSync };
+    const resolved = fs.realpathSync(file), handles = new Set();
+    let hostBytesRead = 0;
+    fs.openSync = function(path, ...args) { const fd = original.openSync.call(this, path, ...args); if (String(path) === resolved) handles.add(fd); return fd; };
+    fs.readSync = function(fd, ...args) { const read = original.readSync.call(this, fd, ...args); if (handles.has(fd)) hostBytesRead += read; return read; };
+    fs.closeSync = function(fd) { handles.delete(fd); return original.closeSync.call(this, fd); };
+    syncBuiltinESMExports();
+    try {
+        const query = new URLSearchParams({ session: captainSessionId, summary: '1' });
+        const poll = async (tag) => {
+            const headers = tag === undefined ? { cookie } : { cookie, 'if-none-match': tag };
+            const response = await fetch(`${baseUrl}/plugins/dsh-agent-teams/state?${query}`, { headers, signal: AbortSignal.timeout(10000) });
+            assert.equal(response.status, 200);
+            const snapshot = (await response.json()).teams.find(item => item.teamId === team.id);
+            assert.ok(snapshot, 'The published collector must retain the audit team');
+            return { snapshot, tag: response.headers.get('etag') };
+        };
+        const { snapshot: before, tag } = await poll();
+        assert.match(tag, /^W\/"/);
+        fs.writeFileSync(file, Buffer.alloc(bytes.length, 66));
+        fs.utimesSync(file, stats.atime, stats.mtime);
+        const { snapshot: after, tag: changedTag } = await poll(tag);
+        assert.notEqual(changedTag, tag, 'artifact drift must invalidate an otherwise unchanged snapshot');
+        assert.equal(readFileSync(statePath, 'utf8'), stateBytes, 'Only the artifact changed');
+        const snapshot = {
+            before: { ok: before.delivery.ok, deliverable: before.deliverable },
+            after: { ok: after.delivery.ok, deliverable: after.deliverable, stale: typeof after.tasks.find(task => task.id === 't2').verdictStale === 'string' },
+            hostBytesRead,
+        };
+        // Stable credential-free snapshot from a real CLI/Loader, actual
+        // published artifact, auth service, HTTP route and worker entry.
+        assert.deepEqual(snapshot, { before: { ok: true, deliverable: true }, after: { ok: false, deliverable: false, stale: true }, hostBytesRead: 0 });
+        record({ event: 'web-workspace-audit', ...snapshot });
+    } finally { Object.assign(fs, original); syncBuiltinESMExports(); }
+}
 async function waitFor(predicate, description) {
     const deadline = Date.now() + 25000;
     while (!predicate()) {
@@ -52,7 +109,12 @@ class WebApprovalAdapter extends LlmAdapter {
         assert.equal(failed, undefined, 'Real workflow tool failed: ' + JSON.stringify(failed));
         const isMember = system?.includes('WEB_APPROVAL_MEMBER') === true;
         record({ event: 'web-request', sessionId: options.sessionId, isMember, model: options.model, reasoningEffort: options.reasoningEffort, system: system, tools: options.tools, messages: options.messages });
-        const pluginMessages = options.messages.filter(message => message.role === 'user' && message.source?.kind === 'agent-teams');
+        // Supported pre-v3 hosts use the producer-owned legacy wrapper. Keep
+        // checking the plugin identity so unrelated plugin messages cannot
+        // satisfy the approval/report assertions.
+        const pluginMessages = options.messages.filter(message => message.role === 'user' && (
+            message.source?.kind === 'agent-teams'
+            || (message.source?.kind === 'plugin' && message.source.plugin === '@nanmicoder/dsh-agent-teams')));
         const messageText = message => message.content.filter(block => block.type === 'text').map(block => block.text).join('\n');
         const approvals = pluginMessages.filter(message => messageText(message).includes('The user approved the staged AgentTeams plan') && messageText(message).includes('from the pre-run review UI.'));
         const reports = pluginMessages.filter(message => messageText(message).includes('AgentTeams message from member worker:') && messageText(message).includes('WEB_MEMBER_REPORT_OK'));
@@ -118,6 +180,7 @@ export function apply(ctx) {
     } }));
     void (async () => {
         await ctx.get('loader').await();
+        await ctx.workspaceRegistry.create(process.cwd(), 'Web approval regression');
         const handle = await ctx.agents.create({ sessionId: 'session-' + randomUUID(), meta: { cwd: process.cwd() }, agentOptions: { provider: 'runtime-lab', model: 'fixture-model' } });
         ctx.effect(() => () => handle.dispose());
         const captain = handle.agent;
@@ -141,6 +204,30 @@ export function apply(ctx) {
         assert.equal(auth.status, 303, 'The real browser token exchange must issue a cookie');
         const cookie = auth.headers.get('set-cookie')?.split(';', 1)[0];
         assert.ok(cookie, 'The real connection must mint a browser cookie');
+        const stateUrl = baseUrl + '/plugins/dsh-agent-teams/state';
+        const stateQuery = new URLSearchParams({ session: captain.id, summary: '1' });
+        const getState = (query = '', tag) => fetch(query ? `${stateUrl}?${query}` : stateUrl, {
+            headers: tag === undefined ? { cookie } : { cookie, 'if-none-match': tag },
+            signal: AbortSignal.timeout(10000),
+        });
+        const draftResponse = await getState(stateQuery);
+        assert.equal(draftResponse.status, 200);
+        const draftTag = draftResponse.headers.get('etag');
+        assert.match(draftTag, /^W\/"/);
+        const draftTeams = (await draftResponse.json()).teams;
+        assert.deepEqual(draftTeams.map(team => team.teamId), [staged.id]);
+        assert.equal(draftTeams[0].tasks[0].description, staged.tasks[0].description);
+        assert.equal(draftTeams[0].members[0].executionPrompt, staged.members[0].executionPrompt);
+        const unchanged = await getState(stateQuery, `"other,tag", ${draftTag.slice(2)}`);
+        assert.equal(unchanged.status, 304);
+        assert.equal(unchanged.headers.get('etag'), draftTag);
+        assert.equal(await unchanged.text(), '');
+        const malformed = await getState(stateQuery, `${draftTag}, invalid`);
+        assert.equal(malformed.status, 200);
+        await malformed.arrayBuffer();
+        const otherSession = await getState(new URLSearchParams({ session: 'another-captain', summary: '1' }), draftTag);
+        assert.equal(otherSession.status, 200);
+        assert.deepEqual(await otherSession.json(), { teams: [] });
         const postApproval = teamId => fetch(baseUrl + '/plugins/dsh-agent-teams/plan', { method: 'POST', headers: { 'content-type': 'application/json', origin: baseUrl, cookie }, body: JSON.stringify({ sessionId: captain.id, teamId, action: 'approve' }), signal: AbortSignal.timeout(10000) });
         const beforeInvalidRequests = events.filter(event => event.event === 'web-request' && !event.isMember).length;
         const invalid = await postApproval('missing-team-' + randomUUID());
@@ -173,6 +260,27 @@ export function apply(ctx) {
         assert.equal(events.filter(event => event.event === 'web-request' && !event.isMember).length, beforeRepeatRequests, 'Rejected repeat approval must not wake the captain');
         assert.equal(readTeam().phase, 'running');
         record({ event: 'web-http-repeat-rejected', sessionId: captain.id, status: repeat.status });
+        // #262: the real member is awaiting model output, before in_progress.
+        // The panel route must preserve this claim rather than call it ready/running.
+        await waitFor(() => events.some(event => event.event === 'web-request' && event.isMember), 'Member request starts before checking claimed state');
+        const activityResponse = await getState(stateQuery, draftTag);
+        assert.equal(activityResponse.status, 200);
+        assert.notEqual(activityResponse.headers.get('etag'), draftTag);
+        const activityBody = await activityResponse.json();
+        const activityTeam = activityBody.teams.find(team => team.teamId === staged.id);
+        assert.ok(activityTeam, 'Real activity route must discover the staged team after approval');
+        assert.equal(readTeam().tasks[0].status, 'claimed');
+        assert.equal(activityTeam.tasks[0].status, 'claimed');
+        assert.equal(activityTeam.tasks[0].state, 'claimed');
+        assert.equal(activityTeam.members[0].activity, 'working');
+        assert.equal(Object.hasOwn(activityTeam.tasks[0], 'description'), false);
+        assert.equal(Object.hasOwn(activityTeam.members[0], 'executionPrompt'), false);
+        const legacyResponse = await getState();
+        assert.equal(legacyResponse.status, 200);
+        const legacyTeam = (await legacyResponse.json()).teams.find(team => team.teamId === staged.id);
+        assert.equal(legacyTeam.tasks[0].description, staged.tasks[0].description);
+        assert.equal(legacyTeam.members[0].executionPrompt, staged.members[0].executionPrompt);
+        record({ event: 'web-claimed-projection', taskStatus: activityTeam.tasks[0].status, visualState: activityTeam.tasks[0].state, memberActivity: activityTeam.members[0].activity });
         record({ event: 'web-member-output-released' });
         releaseMember();
         await waitFor(() => events.some(event => event.event === 'web-captain-report-wake'), 'A real member report must wake the idle captain');
@@ -210,6 +318,18 @@ export function apply(ctx) {
         const memberTools = ['agent_teams_claim_task', 'agent_teams_update_task', 'agent_teams_send_message', 'agent_teams_status'].sort();
         for (const request of memberRequests) assert.deepEqual(request.tools.filter(tool => tool.name.startsWith('agent_teams_')).map(tool => tool.name).sort(), memberTools, 'Every real member request must expose exactly the four member tools');
         record({ event: 'web-headers-stable', sessionId: captain.id, systemSha256, toolsSha256, captainRequests: captainRequests.length, memberRequests: memberRequests.length, memberTeamToolCount: memberTools.length });
+        await verifyWorkspaceAudit(baseUrl, cookie, captain.id);
+        const archivedId = 'runtime-lab-history';
+        const archiveDir = join(process.cwd(), '.agent-teams/archive', archivedId);
+        fs.mkdirSync(archiveDir, { recursive: true });
+        fs.writeFileSync(join(archiveDir, 'team.json'), JSON.stringify({ ...completed, id: archivedId }));
+        const archiveQuery = new URLSearchParams({ session: captain.id, archived: '1' });
+        const archive = await getState(archiveQuery, draftTag);
+        assert.equal(archive.status, 200);
+        const archivedTeams = (await archive.json()).teams;
+        assert.deepEqual(archivedTeams.map(team => team.teamId), [archivedId]);
+        assert.equal(archivedTeams[0].tasks[0].description, staged.tasks[0].description);
+        assert.equal(archivedTeams[0].members[0].executionPrompt, staged.members[0].executionPrompt);
         record({ event: 'web-approval-passed', sessionId: captain.id, teamId: completed.id, memberId: completed.members[0].id, taskStatus: completed.tasks[0].status, captainRequests: captainRequests.length });
         process.stdout.write('WEB_APPROVAL_OK\n');
         ctx.get('appExit')(0);

@@ -1,3 +1,4 @@
+import { executeTool } from './fixture-tools.mjs';
 /** Real Loader, Agent loops, tools and continuation forest; only the LLM is scripted. */
 import assert from 'node:assert/strict';
 import { appendFileSync, readFileSync, existsSync } from 'node:fs';
@@ -41,14 +42,20 @@ class StabilityAdapter extends LlmAdapter {
     await gate(options.sessionId, options.signal);
     const tool = memberResponses.get(options.sessionId) ?? { name: 'lab_step', args: {} };
     memberResponses.delete(options.sessionId);
+    if (tool.outputLimit) {
+      yield { type: 'usage', usage: { inputTokens: 30, outputTokens: 8192 } };
+      yield { type: 'finish', reason: { kind: 'max-tokens' } };
+      return;
+    }
     yield* (tool.finish ? chunks('Closing summary of the already delivered result.') : chunks('', tool));
   }
 }
 export const name = 'runtime-lab-stability';
-export const inject = ['llm', 'agents', 'sessions', 'subagents', 'tools'];
+export const inject = ['llm', 'agents', 'sessions', 'subagents', 'tools', 'systemPrompt'];
 export function apply(ctx) {
   ctx.llm.registerAdapter(['runtime-lab'], new StabilityAdapter());
   ctx.tools.register({ name: 'lab_step', description: 'Deterministic local step boundary', parameters: {}, output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] }, async execute() { return 'STEP_OK'; } });
+  ctx.tools.register({ name: 'lab_forbidden', description: 'Must stay denied across reload', parameters: {}, output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] }, async execute() { throw new Error('Forbidden tool executed'); } });
   void (async () => {
     await ctx.get('loader').await();
     const captain = await ctx.agents.create({ sessionId: 'session-' + randomUUID(), meta: { cwd: process.cwd() }, agentOptions: { provider: 'runtime-lab', model: 'fixture-model' } });
@@ -63,11 +70,36 @@ export function apply(ctx) {
       assert.equal(commands.length, 0, 'captain did not execute all scripted tools');
     }
     const cmd = (name, args = {}) => ({ name: `agent_teams_${name}`, args });
-    await run(cmd('create', { name: 'stability', description: 'Stability regression', approval: 'required' }), cmd('add_member', { name: 'worker' }), cmd('add_member', { name: 'blocked' }), cmd('create_task', { subject: 'Long working turn', assignee: 'worker' }), cmd('create_task', { subject: 'Dependency blocked task', assignee: 'blocked', dependencies: ['t1'] }));
+    await run(cmd('create', { name: 'stability', description: 'Stability regression', approval: 'required' }), cmd('add_member', { name: 'worker', role: 'HMR_ROLE_MARKER', tool_policy: 'restricted' }), cmd('add_member', { name: 'blocked' }), cmd('create_task', { subject: 'Long working turn', assignee: 'worker' }), cmd('create_task', { subject: 'Dependency blocked task', assignee: 'blocked', dependencies: ['t1'] }));
     assert.equal(requests.filter(r => r.sessionId !== captainId).length, 0, 'staged roster must not call a model');
     await run(cmd('approve', { confirmation: 'User approved the deterministic test plan' }));
     const workerId = state().members.find(m => m.name === 'worker').id;
     await until(() => gates.has(workerId), 'first actual assignment');
+    const assertMemberDenied = async label => {
+      const result = await executeTool(ctx.tools, { name: 'agent_teams_create', arguments: { name: 'Forbidden nested team', description: 'Must be rejected', approval: 'required' },
+        callId: ToolCallId(`denied-${label}`), agent: ctx.agents.get(workerId), signal: new AbortController().signal });
+      assert.equal(result.isError, true, 'captain-only tool must reject actual member execution');
+      assert.match(JSON.stringify(result), /unknown tool|UNKNOWN_TOOL/, 'must fail at tool admission, not business validation');
+      record({ event: 'stability-member-tool-denied', phase: label });
+    };
+    await assertMemberDenied('fresh');
+    const live = ctx.agents.get(workerId);
+    const assertReloadSetup = async () => {
+      assert.equal(ctx.agents.get(workerId), live, 'reload must preserve the same live Agent');
+      assert.equal(ctx.tools.get('lab_forbidden', live), undefined);
+      const prompt = await ctx.systemPrompt.assemble({ agent: live, scope: live });
+      assert.equal(prompt.sections.filter(section => section.text.includes('HMR_ROLE_MARKER')).length, 1);
+      const result = await executeTool(ctx.tools, { name: 'lab_forbidden', arguments: {}, callId: ToolCallId('hmr-denied'), agent: live, signal: new AbortController().signal });
+      assert.equal(result.isError, true);
+      assert.match(JSON.stringify(result), /unknown tool|UNKNOWN_TOOL/);
+    };
+    await assertReloadSetup();
+    const entry = [...ctx.get('loader').entries()].find(entry => entry.options.id === 'agent-teams');
+    await entry.update({ config: { ...entry.options.config, maxMembers: 9 } });
+    await entry.fiber.await();
+    await assertReloadSetup();
+    await assertMemberDenied('reload');
+    record({ event: 'stability-hmr-passed', sameAgent: true, persona: true, customToolDenied: true });
     assert.equal(state().members.find(m => m.name === 'blocked').id, '', 'dependency-blocked member must stay dormant');
     const first = requests.find(r => r.sessionId === workerId);
     assert.match(first.userText, /AgentTeams automatic task assignment/);
@@ -114,9 +146,10 @@ export function apply(ctx) {
     assert.equal(state().members.find(m => m.name === 'worker').id, workerId);
     assert.notEqual(state().tasks[0].attemptId, previousAttempt);
     assert.doesNotMatch(requests.filter(r => r.sessionId === workerId).at(-1).userText, /STALE_GUIDANCE_MUST_NOT_RUN/);
+    await assertMemberDenied('cold');
     record({ event: 'stability-reassign-passed', sameMember: true, staleInputExcluded: true });
     const liveWorker = ctx.agents.get(workerId);
-    const start = (parent, label) => startMember(ctx.subagents, { provider: 'spawn', label, request: { parent, prompt: [{ type: 'text', text: label }], maxDepth: 3, agentOptions: { provider: 'runtime-lab', model: 'fixture-model' } }, signal: new AbortController().signal });
+    const start = (parent, label) => (ctx.subagents.startActivation ?? ctx.subagents.startContinuable).call(ctx.subagents, { delivery: 'caller', provider: 'spawn', label, request: { parent, prompt: [{ type: 'text', text: label }], maxDepth: 3, agentOptions: { provider: 'runtime-lab', model: 'fixture-model' } }, signal: new AbortController().signal });
     const grandchild = await start(liveWorker, 'historical-nested-branch');
     const sibling = await start(captain.agent, 'unrelated-sibling');
     await until(() => gates.has(grandchild.childId) && gates.has(sibling.childId), 'concurrent independent branches');
@@ -137,7 +170,7 @@ export function apply(ctx) {
       : typeof runtime[Symbol.for('dsh.subagent.deliverPrompt')] === 'function' ? runtime[Symbol.for('dsh.subagent.deliverPrompt')](captain.agent, workerId, content, { kind: 'user' }, signal, 'queue')
       : runtime[Symbol.for('dsh.subagent.queuePrompt')](captain.agent, workerId, content, { kind: 'user' }, signal), /retired/);
     assert.equal(requests.filter(r => r.sessionId !== captainId && r.sessionId !== sibling.childId).length, callsBefore);
-    await drainMemberChildren(ctx.subagents, captain.agent, [sibling.childId]);
+    await (ctx.subagents.drainChildren ?? ctx.subagents.drainContinuableChildren).call(ctx.subagents, captain.agent, [sibling.childId]);
     await captain.agent.whenIdle();
     record({ event: 'stability-archive-passed', pendingMessagesCleared: 32, descendantsStopped: true, siblingPreserved: true, retiredResumeRejected: true });
     const beforeBatchRequests = requests.filter(r => r.sessionId !== captainId).length;
@@ -197,6 +230,50 @@ export function apply(ctx) {
     await captain.agent.whenIdle();
     assert.equal(requests.filter(r => r.sessionId === captainId).length, parentAfterReport, 'a delivered completion must not wake the parent again');
     record({ event: 'stability-settlement-dedup-passed', reportWakes: parentAfterReport - parentBeforeReport, duplicateModelRequests: 0 });
+    await run(cmd('delete'));
+    await run(cmd('create', { name: 'output-limit', description: 'Output limit settlement',
+      plan: { members: [{ name: 'worker' }], tasks: [{ id: 'job', subject: 'Open task', assignee: 'worker' }] } }));
+    const limitDir = join(root, 'output-limit');
+    const limitState = () => JSON.parse(readFileSync(join(limitDir, 'team.json'), 'utf8'));
+    const limitedId = limitState().members[0].id;
+    await until(() => gates.has(limitedId), 'output-limit member ready');
+    const attemptId = limitState().tasks[0].attemptId;
+    memberResponses.set(limitedId, { name: 'agent_teams_update_task', args: { task_id: 't1', attempt_id: attemptId, status: 'in_progress' } });
+    gates.get(limitedId)();
+    await until(() => gates.has(limitedId), 'open attempt reaches the model');
+    const managedActivation = typeof ctx.subagents.startActivation === 'function';
+    if (managedActivation) {
+      const original = ctx.agents.get(limitedId);
+      // One capped response can receive steering before its turn closes. The
+      // host retains max-tokens as the turn reason even after a normal step.
+      const stopSteering = original.ctx.on('agent/turn-stopping', () => {
+        stopSteering();
+        original.steer(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Continue after the capped response.' }] }));
+      });
+      memberResponses.set(limitedId, { outputLimit: true });
+      gates.get(limitedId)();
+      await until(() => gates.has(limitedId), 'steering starts a new step in the capped turn');
+      memberResponses.set(limitedId, { finish: true });
+      gates.get(limitedId)();
+      await original.whenIdle();
+      await until(() => ctx.agents.get(limitedId) === undefined && limitState().members[0].status === 'idle', 'normal continuation parks the attempt');
+      assert.equal(limitState().tasks[0].status, 'in_progress');
+      // Cold delivery resumes the same durable member with a different
+      // activation. Its output ceiling must close the original open attempt.
+      await run(cmd('send_message', { to: 'worker', content: 'Resume the parked attempt.' }));
+      await until(() => gates.has(limitedId), 'same member receives a cold continuation');
+      assert.notEqual(ctx.agents.get(limitedId), original);
+    }
+    memberResponses.set(limitedId, { outputLimit: true });
+    gates.get(limitedId)();
+    await until(() => limitState().tasks[0].status === 'failed', 'output limit settles the open attempt');
+    const task = limitState().tasks[0];
+    assert.equal(task.attemptId, attemptId);
+    assert.match(task.output, /output-token limit.*MAX_TOKENS/);
+    await until(() => requests.some(request => request.sessionId === captainId && request.userText.includes('MAX_TOKENS')), 'captain receives failure');
+    const reports = readFileSync(join(limitDir, 'inbox/captain.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+    assert.equal(reports.filter(report => report.content.includes('MAX_TOKENS')).length, 1);
+    record({ event: 'stability-output-limit-passed', steeredAttemptParked: managedActivation, memberId: limitedId, attemptId, taskStatus: task.status });
     await run(cmd('delete'));
     await ctx.sessions.flush(captain.agent.session);
     await captain.dispose();

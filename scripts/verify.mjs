@@ -1390,6 +1390,7 @@ check(
 )
 
 const discoveryUrls = []
+const coldLiveUrl = '/plugins/dsh-agent-teams/state?session=cold-captain&summary=1'
 const discoveryIntervals = []
 let scheduledDiscoveryTick
 const discoveryPoller = startActivityPolling([], {
@@ -1413,9 +1414,9 @@ discoveryPoller.stop()
 check(
   'a cardless cold session restores live and archive once, then probes at the discovery cadence',
   discoveryUrls.length === 3
-    && discoveryUrls[0] === '/plugins/dsh-agent-teams/state'
-    && discoveryUrls[1]?.endsWith('?archived=1')
-    && discoveryUrls[2] === '/plugins/dsh-agent-teams/state'
+    && discoveryUrls[0] === coldLiveUrl
+    && discoveryUrls[1] === '/plugins/dsh-agent-teams/state?archived=1&session=cold-captain'
+    && discoveryUrls[2] === coldLiveUrl
     && discoveryIntervals.length === 1
     && discoveryIntervals[0] === ACTIVITY_PROBE_MS,
 )
@@ -1434,7 +1435,7 @@ const latePoller = startActivityPolling([], {
   discoverySessionId: 'cold-captain',
   fetchState: async (url) => {
     lateUrls.push(url)
-    if (url === '/plugins/dsh-agent-teams/state') {
+    if (url === coldLiveUrl) {
       return { ok: true, json: async () => ({ teams: lateLiveTeams }) }
     }
     return { ok: true, json: async () => ({ teams: [] }) }
@@ -1556,7 +1557,7 @@ fallbackPoller.stop()
 check(
   'a live miss checks archive once and retires even an orphaned legacy card',
   fallbackUrls.length === 2
-    && fallbackUrls[1]?.endsWith('?archived=1')
+    && fallbackUrls[1] === '/plugins/dsh-agent-teams/state?archived=1&session=poll-session'
     && settledFallbackKeys.length === 1
     && settledFallbackKeys[0] === pollTarget.key,
 )
@@ -1825,13 +1826,20 @@ function descriptorEvent(label, agentProvider = 'descriptor-provider', agentMode
 
 function fakeChildContext({ label, parentSessionId, cwd, agentProvider, agentModel }) {
   const listeners = new Map()
+  const selections = []
   return {
     listeners,
+    selections,
     context: {
       agent: {
         session: {
           header: { parentSession: parentSessionId, cwd, seedLength: 0 },
           events: [descriptorEvent(label, agentProvider, agentModel)],
+        },
+        // 0.2.2 moved the selected route onto the Agent itself. The plugin calls
+        // `model.select()` instead of intercepting the request.
+        model: {
+          select(selection) { selections.push(selection) },
         },
       },
       on(name, listener) {
@@ -1845,12 +1853,21 @@ function fakeChildContext({ label, parentSessionId, cwd, agentProvider, agentMod
 async function routedConfig(child) {
   const assemble = child.listeners.get('system-prompt/assemble')
   const request = child.listeners.get('agent/request')
-  await assemble({}, {}, async () => ({ variables: {} }))
-  return request({}, async () => ({
+  // 0.2.2 moved the selected route into the Agent's durable model API, so the
+  // hook no longer registers an assemble/request listener; 0.2.1 hosts still do.
+  if (typeof assemble === 'function') await assemble({}, {}, async () => ({ variables: {} }))
+  if (typeof request === 'function') {
+    return request({}, async () => ({
+      provider: 'unselected-provider',
+      model: 'unselected-model',
+      reasoningEffort: 'low',
+    }))
+  }
+  return child.selections.at(-1) ?? {
     provider: 'unselected-provider',
     model: 'unselected-model',
     reasoningEffort: 'low',
-  }))
+  }
 }
 
 let setupMemberSelection

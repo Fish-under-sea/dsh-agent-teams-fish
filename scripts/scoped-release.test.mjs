@@ -5,16 +5,16 @@ import test from 'node:test'
 const text = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')
 const pkg = JSON.parse(text('package.json'))
 
-test('1.0.2 release uses the Fish scope throughout the install contract', () => {
+test('1.1.0 release uses the Fish scope throughout the install contract', () => {
   assert.equal(pkg.name, '@fish-under-sea/dsh-agent-teams-fish')
-  assert.equal(pkg.version, '1.0.2')
+  assert.equal(pkg.version, '1.1.0')
   assert.ok(text('cordis.patch.yml').includes("name: '@fish-under-sea/dsh-agent-teams-fish'"))
   assert.ok(text('scripts/doctor.mjs').includes("locatePackage('@fish-under-sea/dsh-agent-teams-fish'"))
 })
 
-test('both public READMEs document the scoped 1.0.2 install', () => {
+test('both public READMEs document the scoped 1.1.0 install', () => {
   for (const file of ['README.md', 'README.en.md']) {
-    assert.ok(text(file).includes('@fish-under-sea/dsh-agent-teams-fish@1.0.2'), file)
+    assert.ok(text(file).includes('@fish-under-sea/dsh-agent-teams-fish@1.1.0'), file)
   }
 })
 

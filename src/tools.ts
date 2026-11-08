@@ -1,3 +1,4 @@
+import { drainMemberChildren } from './harness-compat.ts'
 /**
  * The `agent_teams_*` model-facing tools.
  *
@@ -66,9 +67,9 @@ import {
   verdictScopePatterns,
 } from './quality-gates.ts'
 import type { DeliveryAudit } from './quality-gates.ts'
-import { auditTeamWorkspace } from './workspace-audit.ts'
+import { workspaceAuditor } from './workspace-audit-service.ts'
 import { readArtifactScope, snapshotWorkspacePaths, workspacePathExists } from './artifacts.ts'
-import { drainMemberChildren, restrictableToolNames } from './harness-compat.ts'
+import { agentTeamsSource, observedSessionFormatVersion, restrictableToolNames } from './harness-compat.ts'
 import { memberSpawnRelaxableDeny, optionalToolPolicy, requireToolPolicy, resolveMemberToolFilter, type MemberToolFilter, type MemberToolPolicy } from './tool-policies.ts'
 import type { ContractAmendmentInput } from './state.ts'
 import type { AcceptanceResult, ArtifactDigest, ArtifactSnapshot, CommandResult, ReviewFinding, ReviewVerdict, TaskKind } from './types.ts'
@@ -85,9 +86,9 @@ import {
   validateMemberLlmSelections,
   type MemberRuntimeConfig,
 } from './members.ts'
-import { TERMINAL_TASK_STATUSES, type TeamMember, type TeamState, type TeamTask } from './types.ts'
+import { TERMINAL_TASK_STATUSES, type TeamMember, type TeamMessage, type TeamState, type TeamTask } from './types.ts'
 import { collectCompletedDependencyOutputs, formatDependencyOutputs, installTeamScheduler } from './scheduler.ts'
-import { installMailboxAdmission, isCurrentMail, mailboxContent, mailboxPrompt, readCurrentMailbox } from './mailbox.ts'
+import { installMailboxAdmission, isCurrentMail, mailboxContent, mailboxPrompt, readCurrentMailboxLocked } from './mailbox.ts'
 import { resolveTeamProfile } from './profiles.ts'
 import { forkLineageNote, leadIdentityOf, leadIdentityOfAsync, nearestLiveLead, sessionLeadsTeam, sessionLeadsTeamAsync } from './lineage.ts'
 
@@ -309,6 +310,32 @@ function requireStagedTeam(team: TeamState): void {
 function trimmedOptional(value: string | null | undefined): string | undefined {
   const trimmed = value?.trim()
   return trimmed === undefined || trimmed === '' ? undefined : trimmed
+}
+
+/** Whether one materialized plan member carries no roster content at all. */
+function isEmptyPlanMember(member: unknown): boolean {
+  if (member === undefined || member === null) return true
+  if (typeof member !== 'object') return typeof member === 'string' && member.trim() === ''
+  return Object.values(member as Record<string, unknown>).every(value =>
+    value === undefined || value === null || (typeof value === 'string' && value.trim() === ''))
+}
+
+/**
+ * Some model gateways materialize optional object parameters instead of
+ * omitting them: a call that only passed `profile` arrives carrying
+ * `plan: { members: [], tasks: [] }`, or one placeholder member whose every
+ * field is blank (issue #234). Such a plan carries no roster, so it must count
+ * as an omitted plan — the same invariant issue #99 established for a blank
+ * `profile` string (a materialized blank equals "not provided").
+ * @param plan - the materialized inline plan argument.
+ * @returns whether the plan carries no member content and no task at all.
+ */
+function isEmptyInlinePlan(plan: { readonly members?: unknown, readonly tasks?: unknown }): boolean {
+  const members = plan.members
+  const tasks = plan.tasks
+  const emptyMembers = !Array.isArray(members) || members.length === 0 || members.every(member => isEmptyPlanMember(member))
+  const emptyTasks = !Array.isArray(tasks) || tasks.length === 0
+  return emptyMembers && emptyTasks
 }
 
 /**
@@ -636,13 +663,13 @@ export function stagedPlanFeedbackContext(teamName: string): string {
  * @param config - resolved tool config.
  */
 export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): AgentTeamsRuntime {
+  // Own the lazy worker before any asynchronous tool/route callback can race
+  // with unload. Late callbacks retain a closed service and fail safely.
+  const auditor = workspaceAuditor(ctx)
   installRetiredMemberGuard(ctx, config.stateDir)
   installMemberDelegationGuard(ctx, config.stateDir, config.memberMaxDepth ?? 0)
   installMailboxAdmission(ctx, config.stateDir)
   const scheduler = installTeamScheduler(ctx, { stateDir: config.stateDir, executionPrompt: config.executionPrompt, dispatch: dispatchMember })
-  const memberSelections = installMemberSelectionRuntime(ctx, config.stateDir, (workspace, teamId, memberName) => (
-    scheduler.kickMember(workspace, teamId, memberName)
-  ), config.executionPrompt)
 
   async function dispatchMember(captain: Agent, teamId: string, memberName: string, text: string, signal: AbortSignal, mode: 'queue' | 'steer', attemptId?: string): Promise<boolean> {
     const root = stateRootOf(workspaceOf(captain), config)
@@ -862,7 +889,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
     try {
       captain.followup(createUserMessage({
         content: [{ type: 'text', text: stagedPlanFeedbackContext(prepared.teamName) }],
-        source: { kind: 'agent-teams' },
+        source: agentTeamsSource({ kind: 'agent-teams' }, observedSessionFormatVersion(captain)),
       }))
     } catch (error: unknown) {
       // Do not leave the durable UI in a false waiting state when the live
@@ -900,7 +927,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
     try {
       captain.inject(createUserMessage({
         content: [{ type: 'text', text: stagedPlanDiscardContext(discarded.teamName) }],
-        source: { kind: 'agent-teams' },
+        source: agentTeamsSource({ kind: 'agent-teams' }, observedSessionFormatVersion(captain)),
       }))
     } catch (error: unknown) {
       // The archive is already authoritative. Cancellation still prevents a
@@ -912,14 +939,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
     return { teamId: discarded.teamId }
   }
 
-  const runtime: AgentTeamsRuntime = {
-    isPendingMember: memberSelections.isPendingMember,
-    updateStagedPlan,
-    updateStagedPlanBatch,
-    approveStagedTeam,
-    continueStagedPlanning,
-    discardStagedTeam,
-  }
+
 
   ctx.tools.register(defineTool({
     name: 'agent_teams_create',
@@ -1005,7 +1025,11 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
       const profileName = args.profile !== undefined && args.profile.trim() !== ''
         ? args.profile.trim()
         : undefined
-      if (profileName !== undefined && args.plan !== undefined) throw new Error('choose either a configured profile or an inline plan')
+      // Gateways materialize the optional `plan` object the same way (issue
+      // #234): an empty shell carries no roster, so it is an omitted plan and
+      // the profile / inline-plan exclusion below stays untouched.
+      const inlinePlan = args.plan !== undefined && !isEmptyInlinePlan(args.plan) ? args.plan : undefined
+      if (profileName !== undefined && inlinePlan !== undefined) throw new Error('choose either a configured profile or an inline plan')
       const created = await withTeamLock(captainLockKey(stateRoot, captain.id), async () => {
         const current = await findTeamByParticipant(stateRoot, captain.id, await leadIdentityOfAsync(ctx, captain.session))
         if (current !== undefined) {
@@ -1021,7 +1045,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
           if (existing !== undefined) {
             throw new Error(`team id "${teamId}" is taken by another captain — pick a different team name`)
           }
-          if (profileName === undefined && args.plan === undefined) {
+          if (profileName === undefined && inlinePlan === undefined) {
             const state: TeamState = {
               name: teamName,
               id: teamId,
@@ -1046,7 +1070,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
             teamName,
             teamId,
             profileName: profileName ?? 'inline-plan',
-            inlinePlan: args.plan,
+            inlinePlan,
             description: args.description,
             staged,
           })
@@ -1089,7 +1113,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
       }
       const persisted = await readTeam(stateRoot, created.state.id).catch(() => undefined)
       const snapshot = persisted ?? created.state
-      if (snapshot.profile === undefined && args.plan === undefined) {
+      if (snapshot.profile === undefined && inlinePlan === undefined) {
         return {
           team_id: snapshot.id,
           team_name: snapshot.name,
@@ -1340,11 +1364,11 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
           throw new Error(`team "${fresh.name}" is at its member cap (${config.maxMembers})`)
         }
         const selection = await resolveMemberLlmSelection(ctx, captain, {
-          provider: args.provider,
-          model: args.model,
+          provider: trimmedOptional(args.provider),
+          model: trimmedOptional(args.model),
           defaultModel: config.memberModel,
           defaultProvider: config.memberLlmProvider,
-          reasoningEffort: args.reasoning_effort,
+          reasoningEffort: trimmedOptional(args.reasoning_effort),
           fallback: config.fallback,
         }, exec.signal)
         const toolSelection = memberToolSelection(config, captain, trimmedOptional(args.tool_policy))
@@ -1773,16 +1797,22 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
         if (task.reassigning === true) {
           throw new Error(`task ${task.id} is being reassigned; wait for the handoff to finish`)
         }
+        // Gateways materialize this deprecated optional argument, and a model may
+        // also restate its own member name. A blank or self-valued assignee is
+        // harmless: it asks for exactly what a claim does anyway.
+        const requestedAssignee = typeof args.assignee === 'string' && args.assignee.trim() !== ''
+          ? args.assignee.trim()
+          : undefined
         let assignee = task.assignee
         if (identity.kind === 'captain') {
           // A captain may read the capability of its already-started takeover,
           // but must never create a member claim without dispatching it (#125).
-          if (args.assignee !== undefined || task.assignee !== CAPTAIN_KEY
+          if (requestedAssignee !== undefined || task.assignee !== CAPTAIN_KEY
               || (task.status !== 'claimed' && task.status !== 'in_progress')) {
             throw new Error('claim_task is for members claiming their own task; captains must use agent_teams_reassign_task to assign and wake a member')
           }
         } else {
-          if (args.assignee !== undefined) {
+          if (requestedAssignee !== undefined && requestedAssignee !== identity.name) {
             throw new Error('members cannot set assignee when claiming a task')
           }
           if (assignee !== undefined && assignee !== identity.name) {
@@ -2296,12 +2326,38 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
       if (await sessionLeadsTeamAsync(ctx, located, caller.id)) {
         await scheduler.kickTeam(workspace, located.id, await memberOperationParent(ctx, located, caller))
       }
-      const { team, identity } = await withTeamLock(
-        teamLockKey(stateRoot, located.id),
-        () => requireFreshParticipant(ctx, stateRoot, located.id, caller.id),
-      )
+      const {
+        team, identity, captainInbox, ownInbox, memberInboxes, mailboxWarnings, mailboxWarningCount,
+      } = await withTeamLock(teamLockKey(stateRoot, located.id), async () => {
+        // Authorize and read mail under the same lock. A team name can be
+        // reused while the worker audits the previously captured state.
+        const { team, identity } = await requireFreshParticipant(ctx, stateRoot, located.id, caller.id)
+        const mailboxWarnings: string[] = []
+        let mailboxWarningCount = 0
+        const reportMalformed = (agentKey: string) => (lineNumber: number): void => {
+          mailboxWarningCount += 1
+          if (mailboxWarnings.length < 10) mailboxWarnings.push(`${agentKey} mailbox line ${lineNumber}`)
+        }
+        const captainInbox = identity.kind === 'captain'
+          ? (await readCurrentMailboxLocked(stateRoot, team, CAPTAIN_KEY, reportMalformed(CAPTAIN_KEY))).slice(0, 10)
+          : []
+        let ownInbox: TeamMessage[] = []
+        const memberInboxes: Record<string, { count: number; latest: string }> = {}
+        for (const member of team.members) {
+          if (member.status === 'removed' || (identity.kind === 'member' && member.name !== identity.name)) continue
+          const messages = await readCurrentMailboxLocked(stateRoot, team, member.name, reportMalformed(member.name))
+          if (identity.kind === 'member') ownInbox = messages.slice(0, 10)
+          if (messages.length > 0) {
+            memberInboxes[member.name] = {
+              count: messages.length,
+              latest: messages[messages.length - 1]?.content.slice(0, 200) ?? '',
+            }
+          }
+        }
+        return { team, identity, captainInbox, ownInbox, memberInboxes, mailboxWarnings, mailboxWarningCount }
+      })
       const activity = memberActivity(ctx, team.members.map((member) => member.id))
-      const audit = auditTeamWorkspace(workspace, team)
+      const audit = await auditor.audit(workspace, team, stateRoot)
       const members = team.members
         .filter((member) => member.status !== 'removed')
         .map((member) => ({
@@ -2333,36 +2389,6 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
         ...task.profileSeedId === undefined ? {} : { seed_id: task.profileSeedId },
         ...task.output !== undefined ? { output: task.output } : {},
       }))
-      const mailboxWarnings: string[] = []
-      let mailboxWarningCount = 0
-      const reportMalformed = (agentKey: string) => (lineNumber: number): void => {
-        mailboxWarningCount += 1
-        if (mailboxWarnings.length < 10) {
-          mailboxWarnings.push(`${agentKey} mailbox line ${lineNumber}`)
-        }
-      }
-      const captainInbox = identity.kind === 'captain'
-        ? await readCurrentMailbox(stateRoot, team.id, CAPTAIN_KEY, reportMalformed(CAPTAIN_KEY))
-        : []
-      const ownInbox = identity.kind === 'member' ? (await readCurrentMailbox(stateRoot, team.id, identity.name)).slice(0, 10) : []
-      const memberInboxes: Record<string, { count: number; latest: string }> = {}
-      const visibleMembers = identity.kind === 'captain'
-        ? members
-        : members.filter((member) => member.name === identity.name)
-      for (const member of visibleMembers) {
-        const messages = await readCurrentMailbox(
-          stateRoot,
-          team.id,
-          member.name,
-          reportMalformed(member.name),
-        )
-        if (messages.length > 0) {
-          memberInboxes[member.name] = {
-            count: messages.length,
-            latest: messages[messages.length - 1]?.content.slice(0, 200) ?? '',
-          }
-        }
-      }
       const coverage = buildCoverageMatrix(
         [...new Set(team.tasks.flatMap((item) => item.coverageOf ?? []))],
         team.tasks,
@@ -2403,7 +2429,7 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
         viewer: identity.name,
         members,
         tasks,
-        captain_inbox: captainInbox.slice(0, 10).map((message) => ({
+        captain_inbox: captainInbox.map((message) => ({
           from: message.from,
           content: mailboxContent(message),
           ts: message.ts,
@@ -2414,12 +2440,18 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
         mailbox_warning_count: mailboxWarningCount,
       }
       const acknowledged = identity.kind === 'captain'
-        ? captainInbox.slice(0, 10).map(message => message.id)
+        ? captainInbox.map(message => message.id)
         : ownInbox.map(message => message.id)
       if (acknowledged.length > 0) {
-        await withTeamLock(teamLockKey(stateRoot, team.id), () => (
-          acknowledgeMailbox(stateRoot, team.id, identity.kind === 'captain' ? CAPTAIN_KEY : identity.name, acknowledged)
-        ))
+        await withTeamLock(teamLockKey(stateRoot, team.id), async () => {
+          // Keep acknowledgement after the audit, and never write through
+          // the captured identity if the live team or recipient changed.
+          const current = await readTeam(stateRoot, team.id).catch(() => undefined)
+          if (current === undefined || current.captainSessionId !== team.captainSessionId || current.createdAt !== team.createdAt) return
+          const recipient = await participantIdentityOf(ctx, current, caller.id)
+          if (recipient?.kind !== identity.kind || recipient.name !== identity.name) return
+          await acknowledgeMailbox(stateRoot, team.id, recipient.name, acknowledged)
+        })
       }
       return result
     },
@@ -2530,6 +2562,20 @@ export function registerAgentTeamsTools(ctx: Context, config: ToolsConfig): Agen
       return { deleted: true, team_name: team.name }
     },
   }))
+  // Live-member hydration validates saved filters against registered tools.
+  const memberSelections = installMemberSelectionRuntime(ctx, config.stateDir, (workspace, teamId, memberName) => (
+    scheduler.kickMember(workspace, teamId, memberName)
+  ))
+
+  const runtime: AgentTeamsRuntime = {
+    isPendingMember: memberSelections.isPendingMember,
+    updateStagedPlan,
+    updateStagedPlanBatch,
+    approveStagedTeam,
+    continueStagedPlanning,
+    discardStagedTeam,
+  }
+
   return runtime
 }
 
@@ -2547,7 +2593,21 @@ async function initializeProfileTeam(input: {
   description?: string
   staged: boolean
 }): Promise<{ committed: true; state: TeamState }> {
-  const profile = resolveTeamProfile(input.inlinePlan === undefined ? input.config.profiles : { [input.profileName]: input.inlinePlan }, input.profileName, input.config.maxMembers)
+  // Tool gateways can materialize omitted optional strings as blanks (#234).
+  // Normalize only the tool-supplied roster; owner profile validation remains
+  // strict, and required fields, unknown policies and route pairing still fail.
+  const inlinePlan = input.inlinePlan === undefined ? undefined : {
+    ...input.inlinePlan,
+    members: input.inlinePlan.members.map(member => ({
+      ...member,
+      role: trimmedOptional(member.role),
+      provider: trimmedOptional(member.provider),
+      model: trimmedOptional(member.model),
+      reasoning_effort: trimmedOptional(member.reasoning_effort),
+      tool_policy: trimmedOptional(member.tool_policy),
+    })),
+  }
+  const profile = resolveTeamProfile(inlinePlan === undefined ? input.config.profiles : { [input.profileName]: inlinePlan }, input.profileName, input.config.maxMembers)
   const selections: Awaited<ReturnType<typeof resolveMemberLlmSelection>>[] = []
   for (const template of profile.members) {
     selections.push(await resolveMemberLlmSelection(input.ctx, input.captain, {

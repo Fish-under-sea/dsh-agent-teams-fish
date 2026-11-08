@@ -14,7 +14,7 @@
  */
 
 import { createHash, randomUUID } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { MemberToolFilter } from './tool-policies.ts'
@@ -285,13 +285,20 @@ export function readTeamSync(stateRoot: string, teamId: string): TeamState | und
   }
 }
 
+/** Pair a cancellation-sensitive team replacement with its live effect. */
+interface TeamWriteCommit {
+  signal: AbortSignal
+  onCommit: () => void
+}
+
 /**
  * Persist one team record (inside the caller's lock).
  * @param stateRoot - resolved absolute state root directory.
  * @param state - the record to persist.
+ * @param commit - gate and synchronous effect for a cancellation-sensitive replacement.
  */
-export async function writeTeam(stateRoot: string, state: TeamState): Promise<void> {
-  await atomicWriteText(join(stateRoot, state.id, 'team.json'), JSON.stringify(state, null, 2))
+export async function writeTeam(stateRoot: string, state: TeamState, commit?: TeamWriteCommit): Promise<void> {
+  await atomicWriteText(join(stateRoot, state.id, 'team.json'), JSON.stringify(state, null, 2), commit)
 }
 
 /** Read the durable set of member session ids retired by remove/delete. */
@@ -700,7 +707,7 @@ export async function replaceFileAtomicOrDirect(
  * degrading to a direct overwrite when the atomic rename cannot proceed
  * (see {@link replaceFileAtomicOrDirect} for the Windows EPERM rationale).
  */
-async function atomicWriteText(file: string, content: string): Promise<void> {
+async function atomicWriteText(file: string, content: string, commit?: TeamWriteCommit): Promise<void> {
   const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`
   try {
     await writeFile(temporary, content, { encoding: 'utf8', flag: 'wx' })
@@ -708,11 +715,29 @@ async function atomicWriteText(file: string, content: string): Promise<void> {
     await rm(temporary, { force: true }).catch(() => undefined)
     throw error
   }
+  // Stage bytes asynchronously. Guarded callers install the file and apply
+  // its live effect in the same JS turn, so abort can never leave a canceled
+  // route visible to a synchronous cold read while the rename is pending.
+  const remove = (path: string) => rm(path, { force: true })
+  let effectFailure: { error: unknown } | undefined
+  const commitIfActive = (replace: () => void): boolean => {
+    if (commit?.signal.aborted) return false
+    replace()
+    // An effect failure is not a filesystem failure. Do not let the Windows
+    // retry/direct overwrite run the effect again.
+    try { commit?.onCommit() } catch (error) { effectFailure = { error } }
+    return true
+  }
   await replaceFileAtomicOrDirect(temporary, file, content, {
-    rename: (from, to) => rename(from, to),
-    writeFile: (target, payload) => writeFile(target, payload, 'utf8'),
-    remove: (path) => rm(path, { force: true }),
+    rename: commit === undefined ? (from, to) => rename(from, to) : async (from, to) => {
+      if (!commitIfActive(() => renameSync(from, to))) await remove(from).catch(() => undefined)
+    },
+    writeFile: commit === undefined ? (target, payload) => writeFile(target, payload, 'utf8') : async (target, payload) => {
+      commitIfActive(() => writeFileSync(target, payload, 'utf8'))
+    },
+    remove,
   })
+  if (effectFailure !== undefined) throw effectFailure.error
 }
 
 /** Whether a parsed JSON value is a plain record. */
@@ -782,6 +807,9 @@ function isTeamMember(value: unknown): value is TeamMember {
     // A member without a policy keeps the legacy shape: both fields stay absent.
     && isOptionalNonBlankString(value['toolPolicy'])
     && (value['toolFilter'] === undefined || isMemberToolFilter(value['toolFilter']))
+    && (value['runtimeSetup'] === undefined || (isRecord(value['runtimeSetup'])
+      && typeof value['runtimeSetup']['persona'] === 'string'
+      && isMemberToolFilter(value['runtimeSetup']['toolFilter'])))
     && isFiniteNumber(value['joinedAt'])
     && (value['status'] === 'idle' || value['status'] === 'working' || value['status'] === 'removed')
 }
@@ -1234,10 +1262,11 @@ export async function listArchivedTeamIds(stateRoot: string): Promise<string[]> 
 // ── activity snapshot (server-side, like the Claude Code desktop watcher) ──
 
 /** Visual task state for the activity panel. */
-export type VisualTaskState = 'blocked' | 'open' | 'running' | 'completed' | 'failed' | 'cancelled'
+export type VisualTaskState = 'blocked' | 'open' | 'claimed' | 'running' | 'completed' | 'failed' | 'cancelled'
 
 /**
- * The visual state of one task: `running` while in_progress, `completed`
+ * The visual state of one task: `claimed` after assignment, `running` only
+ * after the explicit in_progress update, `completed`
  * when done, `failed`/`cancelled` when terminal without success, `blocked`
  * while any dependency is unfinished, else `open`.
  */
@@ -1250,6 +1279,7 @@ export function taskVisualState(
   if (status === 'failed') return 'failed'
   if (status === 'cancelled') return 'cancelled'
   if (status === 'in_progress') return 'running'
+  if (status === 'claimed') return 'claimed'
   const byId = new Map(tasks.map((task) => [task.id, task]))
   const openDependency = dependencies.some((dependencyId) => {
     const dependency = byId.get(dependencyId)

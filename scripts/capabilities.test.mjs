@@ -32,6 +32,9 @@ async function mountCodeRuntime(host, workspace) {
     try { requireBase.resolve('@deepseek-ai/dsh-ptc-runtime-node'); modern = true } catch {}
     if (modern) {
       await load('session-projection')
+      let hasWorkingDirectory = false
+      try { requireBase.resolve('@deepseek-ai/dsh-working-directory'); hasWorkingDirectory = true } catch {}
+      if (hasWorkingDirectory) await load('working-directory')
       await load('fs-local')
       await load('subprocess-local')
       await load('sandbox-local')
@@ -198,8 +201,8 @@ test('stable tool presentation uses real scoped registry and prompt assembly', a
       host.emit('agent/session-start', { agent: child, source: 'resume' })
       assert.deepEqual((await names(child)).sort(), [...MEMBER_TOOL_NAMES].sort())
     })
-    await t.test('PTC and both modes keep the operation SDK stable after status', async () => {
-      for (const mode of ['ptc', 'both']) {
+    await t.test('supported PTC presentation modes keep the operation SDK stable after status', async () => {
+      for (const mode of ['ptc', ...(!requireDsh('@deepseek-ai/dsh/package.json').version.startsWith('0.2.1') ? ['both'] : [])]) {
         const restore = a.ctx.tools.presentAs(mode)
         const assembly = await assemble(a)
         const sdk = assembly.sections.find(section => section.name === 'tools:sdk').text

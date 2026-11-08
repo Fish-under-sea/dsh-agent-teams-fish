@@ -8,8 +8,8 @@
  * sendMessage instead steers a running Agent and must never carry team jobs.
  */
 import type { Context } from '@deepseek-ai/cordis'
-import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent'
-import type { ContentBlock, MessageId, MessageSource } from '@deepseek-ai/dsh-llm'
+import { installModelSelection, type Agent, type AgentOptions, type ModelSelection } from '@deepseek-ai/dsh-agent'
+import type { ContentBlock, MessageId, MessageSource, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import * as dshSession from '@deepseek-ai/dsh-session'
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
@@ -35,30 +35,96 @@ type Followup = (parent: Agent, childId: SessionId, content: ContentBlock[], opt
 type Queue = (parent: Agent, childId: SessionId, content: ContentBlock[], source: MessageSource, signal: AbortSignal) => Promise<MessageId>
 type Deliver = (parent: Agent, childId: SessionId, content: ContentBlock[], source: MessageSource, signal: AbortSignal, delivery: 'queue' | 'steer') => Promise<MessageId>
 type Send = (sender: Agent, targetId: SessionId, content: ContentBlock[], options: { signal: AbortSignal }) => Promise<MessageId>
-/** 成员启动在新旧宿主间共有的请求字段，不依赖已移除的宿主类型名。 */
-interface MemberStartSpec {
-  provider: string
-  label?: string
-  request: {
-    parent: Agent
-    prompt: ContentBlock[]
-    persona?: string
-    toolFilter?: MemberToolFilter
-    agentOptions?: ModelSelection
-  }
-  signal: AbortSignal
-}
 interface RuntimeBoundary {
-  start?: (name: string, request: { parent: Agent }) => Promise<unknown>
-  startContinuable?: (spec: MemberStartSpec) => Promise<{ childId: SessionId }>
-  startActivation?: (spec: MemberStartSpec & { delivery: 'parent' | 'caller' }) => Promise<{ childId: SessionId }>
-  drainChildren?: (parent: Agent, childIds: readonly SessionId[]) => Promise<void>
-  drainContinuableChildren?: (parent: Agent, childIds: readonly SessionId[]) => Promise<void>
   followup?: Followup
   registerContinuableSetup?: (setup: LegacySetup) => () => void
   sendMessage?: Send
   [hostPromptQueue]?: Queue
   [hostPromptDeliver]?: Deliver
+}
+
+/** Version-independent creation contract; legacy-only options stay at this seam. */
+export interface MemberStartSpec {
+  provider: string
+  label: string
+  request: {
+    parent: Agent
+    prompt: ContentBlock[]
+    agentOptions?: AgentOptions
+    persona?: string
+    toolFilter?: MemberToolFilter
+  }
+  signal: AbortSignal
+}
+interface CreationBoundary {
+  start?: (name: string, request: MemberStartSpec['request']) => Promise<unknown>
+  startContinuable?: (spec: MemberStartSpec) => Promise<{ childId: SessionId }>
+  startActivation?: (spec: MemberStartSpec & { delivery: 'parent' }) => Promise<{
+    childId: SessionId
+    result: Promise<unknown>
+  }>
+}
+export function usesManagedActivations(runtime: Context['subagents']): boolean {
+  return typeof (runtime as unknown as CreationBoundary).startActivation === 'function'
+}
+
+export async function startMember(runtime: Context['subagents'], spec: MemberStartSpec): Promise<{ childId: SessionId }> {
+  const host = runtime as unknown as CreationBoundary
+  if (typeof host.startActivation === 'function') {
+    const { persona: _persona, toolFilter: _filter, ...request } = spec.request
+    const activation = await host.startActivation.call(runtime, { ...spec, request, delivery: 'parent' })
+    // Preserve native settlement as the missing-report/error fallback on both
+    // fresh and resumed activations. mailbox.ts deduplicates successful reports.
+    void activation.result.catch(() => undefined)
+    return activation
+  }
+  if (typeof host.startContinuable !== 'function') return unsupported('missing member creation API')
+  return host.startContinuable.call(runtime, spec)
+}
+
+/** Wrap every available creation API, restoring only this plugin's own methods. */
+export function guardSubagentCreation(ctx: Context, check: (parent: Agent) => void): void {
+  const runtime = ctx.subagents as unknown as CreationBoundary
+  ctx.effect(() => {
+    const disposers: (() => void)[] = []
+    for (const key of ['start', 'startContinuable', 'startActivation'] as const) {
+      const original = runtime[key]
+      if (typeof original !== 'function') continue
+      const descriptor = Object.getOwnPropertyDescriptor(runtime, key)
+      const guarded = async (...args: unknown[]): Promise<unknown> => {
+        const request = key === 'start' ? args[1] : (args[0] as MemberStartSpec).request
+        check((request as MemberStartSpec['request']).parent)
+        return Reflect.apply(original, ctx.subagents, args)
+      }
+      Object.defineProperty(runtime, key, { value: guarded, writable: true, configurable: true })
+      disposers.push(() => {
+        if (Object.getOwnPropertyDescriptor(runtime, key)?.value !== guarded) return
+        if (descriptor === undefined) Reflect.deleteProperty(runtime, key)
+        else Object.defineProperty(runtime, key, descriptor)
+      })
+    }
+    return () => { for (const dispose of disposers) dispose() }
+  }, 'agent-teams: member delegation budget')
+}
+
+/**
+ * Install the member's next-step model selection hook on a child context.
+ *
+ * 0.2.1 hosts take a caller-owned selection ref here; 0.2.2 moved the selected
+ * route into the Agent's own durable model API, so the hook contributes switch
+ * notices only and takes the child context alone. Dispatch on the function's
+ * own arity so one build serves both declared host lines instead of binding to
+ * whichever signature the development host happens to ship.
+ * @param childCtx - the member child context the hook belongs to.
+ * @param ref - the resolved selection the member is running on.
+ * @returns the disposal for the installed hook.
+ */
+export function installMemberModelSelection(
+  childCtx: Context,
+  ref: { current: ModelSelection; assembled?: ModelSelection },
+): () => void {
+  const install = installModelSelection as unknown as (ctx: Context, ref?: unknown) => () => void
+  return install.length >= 2 ? install(childCtx, ref) : install(childCtx)
 }
 
 function boundary(runtime: Context['subagents']): RuntimeBoundary {
@@ -73,63 +139,6 @@ declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
     'agent-teams': { readonly kind: 'agent-teams' }
   }
-}
-
-/** 在 0.2.1 的 activation 契约上保留旧版持久子会话与父级通知语义。 */
-export async function startMember(runtime: Context['subagents'], spec: MemberStartSpec): Promise<{ childId: SessionId }> {
-  const host = boundary(runtime)
-  if (typeof host.startActivation === 'function') {
-    return host.startActivation.call(runtime, { ...spec, delivery: 'parent' })
-  }
-  if (typeof host.startContinuable === 'function') return host.startContinuable.call(runtime, spec)
-  return unsupported('missing member creation API')
-}
-
-/** 新旧宿主均只停止指定成员子树，保留原生接收者与停止失败。 */
-export async function drainMemberChildren(runtime: Context['subagents'], parent: Agent, childIds: readonly SessionId[]): Promise<void> {
-  const host = boundary(runtime)
-  if (typeof host.drainChildren === 'function') return host.drainChildren.call(runtime, parent, childIds)
-  if (typeof host.drainContinuableChildren === 'function') return host.drainContinuableChildren.call(runtime, parent, childIds)
-  return unsupported('missing member drain API')
-}
-
-/** 只包装真实存在的接口，避免把缺失的旧方法伪装成可调用方法。 */
-export function guardSubagentCreation(ctx: Context, check: (parent: Agent) => void): void {
-  const runtime = ctx.subagents
-  const host = boundary(runtime)
-  if (typeof host.start !== 'function' && typeof host.startContinuable !== 'function' && typeof host.startActivation !== 'function') {
-    return unsupported('missing subagent creation API')
-  }
-  ctx.effect(() => {
-    let active = true
-    const restorations: (() => void)[] = []
-    const admit = (parent: Agent): void => { if (active) check(parent) }
-    const replace = <K extends 'start' | 'startContinuable' | 'startActivation'>(key: K, wrapped: RuntimeBoundary[K]): void => {
-      const descriptor = Object.getOwnPropertyDescriptor(host, key)
-      host[key] = wrapped
-      restorations.push(() => {
-        if (Object.getOwnPropertyDescriptor(host, key)?.value !== wrapped) return
-        if (descriptor === undefined) Reflect.deleteProperty(host, key)
-        else Object.defineProperty(host, key, descriptor)
-      })
-    }
-    const start = host.start
-    const continuable = host.startContinuable
-    const activation = host.startActivation
-    if (typeof start === 'function') {
-      replace('start', async (name, request) => { admit(request.parent); return start.call(runtime, name, request) })
-    }
-    if (typeof continuable === 'function') {
-      replace('startContinuable', async spec => { admit(spec.request.parent); return continuable.call(runtime, spec) })
-    }
-    if (typeof activation === 'function') {
-      replace('startActivation', async spec => { admit(spec.request.parent); return activation.call(runtime, spec) })
-    }
-    return () => {
-      active = false
-      for (const restore of restorations.reverse()) restore()
-    }
-  }, 'agent-teams: member delegation budget')
 }
 
 /** Package identity a released plugin-wrapper source names on older hosts. */
@@ -149,8 +158,35 @@ export type AgentTeamsSource =
   | { readonly kind: 'agent-teams' }
   | { readonly kind: 'agent-teams-command'; readonly goal?: string; readonly profile?: string }
 
-/** Stored session format generation of the running host; 0 when it exposes none. */
-export function hostSessionFormatVersion(): number {
+/** Anything that exposes the stored format generation on its live session header. */
+export interface SessionFormatBearer {
+  readonly session?: { readonly header?: { readonly version?: unknown } } | undefined
+}
+
+/**
+ * Stored format generation observed on a live session, when the host exposes it.
+ *
+ * The module constant is only a fallback: a plugin can resolve a *nested*
+ * `@deepseek-ai/dsh-session` copy that belongs to a different host generation
+ * than the process loading it (a profile whose lockfile pins the DSH package
+ * line, a Desktop shell with an embedded core, a duplicated store). That copy
+ * then reports the wrong generation — 0 on a v4 host — which selects the
+ * retired `plugin` wrapper and makes every durable AgentTeams message fail the
+ * host's own admission check (#236). The live session header belongs to the
+ * host that persists the message, so it outranks the resolved module.
+ */
+export function observedSessionFormatVersion(subject?: SessionFormatBearer): number | undefined {
+  const version = subject?.session?.header?.version
+  return typeof version === 'number' && Number.isSafeInteger(version) && version >= 0 ? version : undefined
+}
+
+/**
+ * Stored session format generation of the running host; 0 when neither the live
+ * session nor the resolved module exposes one.
+ * @param observed - a live session observation; preferred over the module constant.
+ */
+export function hostSessionFormatVersion(observed?: number): number {
+  if (typeof observed === 'number' && Number.isSafeInteger(observed) && observed >= 0) return observed
   const version = (dshSession as unknown as { SESSION_FORMAT_VERSION?: number }).SESSION_FORMAT_VERSION
   return typeof version === 'number' && Number.isSafeInteger(version) && version >= 0 ? version : 0
 }
@@ -167,10 +203,14 @@ export function hostSessionFormatVersion(): number {
  * the released plugin wrapper is used instead; the goal and profile already
  * travel in the message text.
  * @param modern - the producer-owned source to use where the host admits it.
+ * @param observed - the live session's stored format generation, when callers
+ * have the owning agent at hand. Never trust the resolved module alone: on a
+ * host whose profile pins another DSH line it reports a retired generation and
+ * the v4 writer rejects the wrapper (#236).
  * @returns a source accepted by the running host and by its migration chain.
  */
-export function agentTeamsSource(modern: AgentTeamsSource): MessageSource {
-  if (hostSessionFormatVersion() >= RELEASED_SOURCE_VOCABULARY_VERSION) return modern
+export function agentTeamsSource(modern: AgentTeamsSource, observed?: number): MessageSource {
+  if (hostSessionFormatVersion(observed) >= RELEASED_SOURCE_VOCABULARY_VERSION) return modern
   // Released-format hosts persist plugin-authored messages as this wrapper; the
   // current vocabulary retired it, so the cast stays confined to this branch
   // and `modern` is the only shape a current host ever sees.
@@ -201,6 +241,22 @@ export function sessionOwnEvents(session: Session): readonly SessionEvent[] {
   const legacy = session as unknown as { events?: readonly SessionEvent[]; header: { seedLength?: number } }
   if (!Array.isArray(legacy.events)) return unsupported('missing ownEvents/legacy session log')
   return legacy.events.slice(legacy.header.seedLength ?? 0)
+}
+
+/** Legacy hosts log each chunk separately; current hosts embed the committed stream. */
+export function outputLimitTurn(event: SessionEvent): number | undefined {
+  const record = event as SessionEvent | {
+    type: 'assistant/chunk'
+    data: { turn: number; chunk: StreamChunk }
+  }
+  if (record.type === 'assistant/chunk') {
+    const { chunk, turn } = record.data
+    return chunk.type === 'finish' && chunk.reason.kind === 'max-tokens' ? turn : undefined
+  }
+  if (record.type === 'assistant/message' && record.data.stream?.some(item =>
+    item.type === 'chunk' && item.chunk.type === 'finish' && item.chunk.reason.kind === 'max-tokens')) {
+    return record.data.turn
+  }
 }
 
 /** 读取宿主冻结的会话策略，旧版没有投影服务时检查本会话日志。 */
@@ -248,7 +304,7 @@ export function installContinuableMemberSetup(ctx: Context, setup: Setup): void 
   const installed = new WeakSet<Agent>()
   const active = new Set<() => void>()
   ctx.effect(() => {
-    const stop = onAgentReady(ctx, (agent, vetoable) => {
+    const attach = (agent: Agent, vetoable: boolean): void => {
       if (installed.has(agent)) return
       // Deliberately synchronous: awaiting here loses the first-request race.
       let teardown: () => void
@@ -281,11 +337,21 @@ export function installContinuableMemberSetup(ctx: Context, setup: Setup): void 
         dispose()
         throw error
       }
-    })
-    return () => {
+    }
+    const stop = onAgentReady(ctx, attach)
+    const cleanup = (): void => {
       stop()
       for (const dispose of [...active]) dispose()
     }
+    try {
+      // Reloads keep Agents alive but dispose the previous plugin's setup.
+      // Subscribe first, then hydrate the live registry; attach is idempotent.
+      for (const agent of ctx.agents.list()) attach(agent, false)
+    } catch (error) {
+      cleanup()
+      throw error
+    }
+    return cleanup
   }, 'agent-teams: member lifecycle compatibility')
 }
 
@@ -295,7 +361,7 @@ export async function queueMemberPrompt(
   content: ContentBlock[], signal: AbortSignal,
 ): Promise<MessageId> {
   const host = boundary(runtime)
-  const source = agentTeamsSource({ kind: 'agent-teams' })
+  const source = agentTeamsSource({ kind: 'agent-teams' }, observedSessionFormatVersion(parent))
   if (typeof host.followup === 'function') {
     return host.followup.call(runtime, parent, childId, content, { source, signal })
   }
@@ -312,7 +378,7 @@ export async function steerMemberPrompt(
   content: ContentBlock[], signal: AbortSignal, live?: Agent,
 ): Promise<MessageId> {
   const host = boundary(runtime)
-  const source = agentTeamsSource({ kind: 'agent-teams' })
+  const source = agentTeamsSource({ kind: 'agent-teams' }, observedSessionFormatVersion(live ?? parent))
   const deliver = host[hostPromptDeliver]
   if (typeof deliver === 'function') return deliver.call(runtime, parent, childId, content, source, signal, 'steer')
   if (typeof host.sendMessage === 'function') return host.sendMessage.call(runtime, parent, childId, content, { signal })
@@ -490,4 +556,15 @@ export async function startMemberWithLenientFilter<T>(
       current.deny = current.deny.filter(name => !droppable.includes(name))
     }
   }
+}
+
+/** Targeted recursive cancellation renamed with the unified activation manager. */
+export async function drainMemberChildren(runtime: Context['subagents'], parent: Agent, ids: readonly SessionId[]): Promise<void> {
+  const host = runtime as unknown as {
+    drainChildren?: (parent: Agent, ids: readonly SessionId[]) => Promise<void>
+    drainContinuableChildren?: (parent: Agent, ids: readonly SessionId[]) => Promise<void>
+  }
+  const drain = host.drainChildren ?? host.drainContinuableChildren
+  if (typeof drain !== 'function') return unsupported('missing targeted child drain')
+  await drain.call(runtime, parent, ids)
 }

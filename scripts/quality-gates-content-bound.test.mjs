@@ -23,7 +23,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdtempSync, mkdirSync, rmSync, statSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, rmSync, statSync, readFileSync, writeFileSync, unlinkSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { canDeclareDelivery, describeQualityLoop } from '../lib/quality-gates.js'
@@ -72,6 +72,12 @@ function workspace() {
   writeFileSync(join(root, 'lib', 'stats.js'), STATS_V1)
   writeFileSync(join(root, 'test', 'stats.test.js'), TEST_V1)
   writeFileSync(join(root, 'package.json'), PACKAGE_V1)
+  // Windows filesystem time can lead Date.now() on a fresh write. Start with
+  // an unambiguously older revision so only the later edits invalidate review.
+  const beforeReview = new Date(Date.now() - 1000)
+  for (const path of ['lib/stats.js', 'test/stats.test.js', 'package.json']) {
+    utimesSync(join(root, path), beforeReview, beforeReview)
+  }
   return root
 }
 

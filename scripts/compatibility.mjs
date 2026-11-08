@@ -59,6 +59,26 @@ export function validatePolicy(input) {
   return hosts.map(host => host.version)
 }
 
+/**
+ * Compare two exact host versions by semver precedence (prerelease tags included).
+ * `undefined` for anything that is not an exact `x.y.z[-alpha|beta|rc.N]` target.
+ * @param left - first host version.
+ * @param right - second host version.
+ * @returns -1, 0 or 1, or undefined when either side is not an exact target.
+ */
+export function compareHostVersions(left, right) {
+  const parse = version => {
+    const match = typeof version === 'string' && /^(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta|rc)\.(\d+))?$/.exec(version)
+    return match && { core: match.slice(1, 4).map(Number), tag: match[4], number: Number(match[5]) }
+  }
+  const a = parse(left), b = parse(right)
+  if (!a || !b) return undefined
+  for (let index = 0; index < 3; index++) if (a.core[index] !== b.core[index]) return Math.sign(a.core[index] - b.core[index])
+  if (a.tag === b.tag) return a.tag ? Math.sign(a.number - b.number) : 0
+  if (!a.tag || !b.tag) return a.tag ? -1 : 1
+  return a.tag < b.tag ? -1 : 1
+}
+
 export function declaredHostVersions(input = policy) {
   return [...validatePolicy(input), ...(input.sourceCandidates ?? []).map(candidate => candidate.version)]
 }

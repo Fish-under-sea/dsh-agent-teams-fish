@@ -4,7 +4,7 @@
  *   --artifact <package.tgz> --report-dir <isolated-directory>
  * Optional: --runtime-dir <already prepared directory> --prepare-only
  */
-import { runRuntimeScenarios, runtimeScenarios } from './harness-runtime-scenarios.mjs';
+import { runRuntimeScenarios, runtimeScenarios, runPluginInstallation } from './harness-runtime-scenarios.mjs';
 import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync, readFileSync, existsSync, copyFileSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
@@ -36,11 +36,42 @@ const registry = 'https://registry.npmjs.org';
 const isDsh = name => /^@deepseek-ai\/dsh(?:-|$)/.test(name);
 const json = (path, value) => writeFileSync(path, JSON.stringify(value, null, 2) + '\n');
 const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex');
-const environment = (extra = {}) => ({ PATH: process.env.PATH, LANG: process.env.LANG ?? 'en_US.UTF-8', HOME: join(report, 'user-home'), TMPDIR: join(report, 'tmp'), npm_config_userconfig: '/dev/null', npm_config_registry: registry, ...extra });
+const userConfig = process.platform === 'win32' ? 'NUL' : '/dev/null';
+// Native install scripts (koffi's cnoke, node-pty) need the Windows shell and
+// profile directories. The fixture environment is deliberately minimal, so
+// forward exactly the variables those builds read instead of the whole block.
+const windowsEnvironment = process.platform === 'win32'
+    ? Object.fromEntries(['LOCALAPPDATA', 'APPDATA', 'USERPROFILE', 'SYSTEMROOT', 'SystemRoot', 'ComSpec', 'PATHEXT', 'TEMP', 'TMP']
+        .map(name => [name, process.env[name]]).filter(([, value]) => value !== undefined))
+    : {};
+// The DSH CLI installs plugins through an external pnpm. Pin the shim directory
+// at the front of the fixture PATH so command lookups inside the spawned shell
+// resolve the same package manager this runner already uses.
+const packageManagerPath = process.platform === 'win32'
+    ? [join(process.env.APPDATA ?? '', 'npm')].filter(existsSync).join(';')
+    : dirname(process.execPath);
+const fixturePath = packageManagerPath ? packageManagerPath + (process.platform === 'win32' ? ';' : ':') + process.env.PATH : process.env.PATH;
+const environment = (extra = {}) => ({ PATH: fixturePath, LANG: process.env.LANG ?? 'en_US.UTF-8', HOME: join(report, 'user-home'), TMPDIR: join(report, 'tmp'), npm_config_userconfig: userConfig, npm_config_registry: registry, ...windowsEnvironment, ...extra });
 mkdirSync(join(report, 'user-home'), { recursive: true });
 mkdirSync(join(report, 'tmp'), { recursive: true });
+/**
+ * Windows resolves `npm` only through its `npm.cmd` shim: CreateProcess appends
+ * `.exe` alone, and Node refuses to launch a batch file without a shell. Route
+ * the package-manager invocation through the command interpreter so the runner
+ * behaves the same on every host the matrix covers.
+ */
+function spawnTarget(argv) {
+    if (process.platform !== 'win32' || !/^npm(?:\.cmd)?$/i.test(argv[0])) return [argv[0], argv.slice(1)];
+    const quote = value => /[\s&|<>^()]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
+    const line = [argv[0], ...argv.slice(1)].map(quote).join(' ');
+    return [process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', line], true];
+}
 async function command(argv, cwd, env, label, timeoutMs = 900000) {
-    const child = spawn(argv[0], argv.slice(1), { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    const [file, args, verbatim] = spawnTarget(argv);
+    const child = spawn(file, args, {
+        cwd, env, stdio: ['ignore', 'pipe', 'pipe'],
+        ...verbatim === true ? { windowsVerbatimArguments: true } : {},
+    });
     let stdout = '', stderr = '', timedOut = false;
     child.stdout.on('data', x => stdout += x);
     child.stderr.on('data', x => stderr += x);
@@ -94,7 +125,7 @@ function verifyCohort() {
     json(join(report, 'cohort.json'), result);
     return result;
 }
-const testFiles = Object.fromEntries(['harness-runtime-verify.mjs', 'harness-runtime-scenarios.mjs', 'fixtures/harness-runtime-llm.mjs', 'fixtures/harness-runtime-resume.mjs', 'fixtures/harness-runtime-idle.mjs', 'fixtures/harness-runtime-entry.mjs', 'fixtures/harness-runtime-web-approval.mjs', 'fixtures/harness-runtime-credentials.mjs', 'fixtures/harness-runtime-protocol.mjs', 'fixtures/harness-runtime-stability.mjs'].map(path => [path, hash(join(dirname(fileURLToPath(import.meta.url)), path))]));
+const testFiles = Object.fromEntries(['compatibility.mjs', '../compatibility.json', 'harness-validation.mjs', 'harness-runtime-verify.mjs', 'harness-runtime-scenarios.mjs', 'fixtures/harness-runtime-llm.mjs', 'fixtures/harness-runtime-resume.mjs', 'fixtures/harness-runtime-idle.mjs', 'fixtures/harness-runtime-entry.mjs', 'fixtures/harness-runtime-web-approval.mjs', 'fixtures/harness-runtime-credentials.mjs', 'fixtures/harness-runtime-protocol.mjs', 'fixtures/harness-runtime-stability.mjs', 'fixtures/harness-runtime-tools.mjs'].map(path => [path, hash(join(dirname(fileURLToPath(import.meta.url)), path))]));
 let artifactSha;
 const manifestPath = join(runtime, 'package.json');
 let manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : undefined;
@@ -117,7 +148,7 @@ if (flags.has('--artifact')) {
 else if (!flags.has('--prepare-only'))
     throw Error('--artifact required unless --prepare-only');
 json(manifestPath, manifest);
-const install = await command(['npm', 'install', '--prefer-online', '--no-audit', '--no-fund', '--registry=' + registry, '--userconfig=/dev/null'], runtime, environment({ 'npm_config_cache': process.env.npm_config_cache ?? join(report, 'npm-cache') }), 'install');
+const install = await command(['npm', 'install', '--prefer-online', '--no-audit', '--no-fund', '--registry=' + registry, '--userconfig=' + userConfig], runtime, environment({ 'npm_config_cache': process.env.npm_config_cache ?? join(report, 'npm-cache') }), 'install');
 if (install.code !== 0)
     throw Error('npm installation failed; see ' + join(report, 'install.stderr.log'));
 const cohort = verifyCohort();
@@ -129,6 +160,9 @@ if (flags.has('--prepare-only')) {
 const plugin = JSON.parse(readFileSync(join(runtime, 'node_modules/@fish-under-sea/dsh-agent-teams-fish/package.json'), 'utf8'));
 if (plugin.name !== '@fish-under-sea/dsh-agent-teams-fish') throw Error('Artifact package identity does not match AgentTeams');
 const runs = await runRuntimeScenarios({ report, runtime, command, environment, selectedScenarios: flags.has('--scenario') ? [flags.get('--scenario')] : scenarios });
+// Exercise the same compatibility gate used by the plugin settings UI. Runtime
+// fixtures alone link the package directly and cannot prove installation works.
+runs.push(...await runPluginInstallation({ version, pluginVersion: plugin.version, artifact: flags.get('--artifact'), runtime, report, command, environment }));
 const passed = runs.every(x => x.passed);
 json(join(report, 'result.json'), { passed, version, artifactSha256: artifactSha, pluginVersion: plugin.version, testFiles, node: process.version, platform: process.platform, arch: process.arch, cohortCount: cohort.count, runs, unverified: ['real provider APIs and credentials', 'browser interaction', 'other operating systems', 'native terminal execution', 'live user-data migration'] });
 console.log(JSON.stringify({ passed, version, report, runs }, null, 2));

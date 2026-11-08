@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "recommendedHost": "0.2.0-rc.2",
+  "recommendedHost": "0.2.2-rc.1",
   "previewTag": "next",
   "supportedHosts": [
     {
-      "version": "0.2.0-rc.2",
+      "version": "0.2.2-rc.1",
       "track": "recommended"
     },
     {
@@ -16,32 +16,68 @@
       "track": "preview"
     },
     {
+      "legacyDirectInstallReason": "Historical direct-fixture coverage only; native plugin-manager installation has not been qualified for this target.",
       "version": "0.1.7-rc.2",
-      "track": "legacy"
+      "track": "legacy",
+      "platforms": [
+        "ubuntu-latest"
+      ]
     },
     {
+      "legacyDirectInstallReason": "Historical direct-fixture coverage only; native plugin-manager installation has not been qualified for this target.",
       "version": "0.1.5-rc.3",
-      "track": "legacy"
+      "track": "legacy",
+      "platforms": [
+        "ubuntu-latest"
+      ]
     },
     {
+      "legacyDirectInstallReason": "Historical direct-fixture coverage only; native plugin-manager installation has not been qualified for this target.",
       "version": "0.1.5-rc.2",
-      "track": "legacy"
+      "track": "legacy",
+      "platforms": [
+        "ubuntu-latest"
+      ]
     },
     {
+      "legacyDirectInstallReason": "Historical direct-fixture coverage only; native plugin-manager installation has not been qualified for this target.",
       "version": "0.1.5-rc.1",
-      "track": "legacy"
+      "track": "legacy",
+      "platforms": [
+        "ubuntu-latest"
+      ]
     },
     {
+      "legacyDirectInstallReason": "Historical direct-fixture coverage only; native plugin-manager installation has not been qualified for this target.",
       "version": "0.1.2-rc.1",
-      "track": "legacy"
+      "track": "legacy",
+      "platforms": [
+        "ubuntu-latest"
+      ]
     },
     {
+      "legacyDirectInstallReason": "Historical direct-fixture coverage only; native plugin-manager installation has not been qualified for this target.",
       "version": "0.1.2-alpha.5",
-      "track": "preview"
+      "track": "preview",
+      "platforms": [
+        "ubuntu-latest"
+      ]
     },
     {
+      "legacyDirectInstallReason": "Historical direct-fixture coverage only; native plugin-manager installation has not been qualified for this target.",
+      "version": "0.2.0-rc.2",
+      "track": "legacy",
+      "platforms": [
+        "ubuntu-latest"
+      ]
+    },
+    {
+      "legacyDirectInstallReason": "Historical direct-fixture coverage only; native plugin-manager installation has not been qualified for this target.",
       "version": "0.1.2-alpha.2",
-      "track": "legacy"
+      "track": "legacy",
+      "platforms": [
+        "ubuntu-latest"
+      ]
     }
   ]
 }

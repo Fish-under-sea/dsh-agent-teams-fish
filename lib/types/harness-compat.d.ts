@@ -8,24 +8,46 @@
  * sendMessage instead steers a running Agent and must never carry team jobs.
  */
 import type { Context } from '@deepseek-ai/cordis';
-import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent';
+import { type Agent, type AgentOptions, type ModelSelection } from '@deepseek-ai/dsh-agent';
 import type { ContentBlock, MessageId, MessageSource } from '@deepseek-ai/dsh-llm';
 import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session';
 import { type MemberToolFilter } from './tool-policies.ts';
 type Setup = (childCtx: Context, child: Agent) => () => void;
-/** 成员启动在新旧宿主间共有的请求字段，不依赖已移除的宿主类型名。 */
-interface MemberStartSpec {
+/** Version-independent creation contract; legacy-only options stay at this seam. */
+export interface MemberStartSpec {
     provider: string;
-    label?: string;
+    label: string;
     request: {
         parent: Agent;
         prompt: ContentBlock[];
+        agentOptions?: AgentOptions;
         persona?: string;
         toolFilter?: MemberToolFilter;
-        agentOptions?: ModelSelection;
     };
     signal: AbortSignal;
 }
+export declare function usesManagedActivations(runtime: Context['subagents']): boolean;
+export declare function startMember(runtime: Context['subagents'], spec: MemberStartSpec): Promise<{
+    childId: SessionId;
+}>;
+/** Wrap every available creation API, restoring only this plugin's own methods. */
+export declare function guardSubagentCreation(ctx: Context, check: (parent: Agent) => void): void;
+/**
+ * Install the member's next-step model selection hook on a child context.
+ *
+ * 0.2.1 hosts take a caller-owned selection ref here; 0.2.2 moved the selected
+ * route into the Agent's own durable model API, so the hook contributes switch
+ * notices only and takes the child context alone. Dispatch on the function's
+ * own arity so one build serves both declared host lines instead of binding to
+ * whichever signature the development host happens to ship.
+ * @param childCtx - the member child context the hook belongs to.
+ * @param ref - the resolved selection the member is running on.
+ * @returns the disposal for the installed hook.
+ */
+export declare function installMemberModelSelection(childCtx: Context, ref: {
+    current: ModelSelection;
+    assembled?: ModelSelection;
+}): () => void;
 declare module '@deepseek-ai/dsh-llm' {
     interface MessageSourceMap {
         'agent-teams': {
@@ -33,14 +55,6 @@ declare module '@deepseek-ai/dsh-llm' {
         };
     }
 }
-/** 在 0.2.1 的 activation 契约上保留旧版持久子会话与父级通知语义。 */
-export declare function startMember(runtime: Context['subagents'], spec: MemberStartSpec): Promise<{
-    childId: SessionId;
-}>;
-/** 新旧宿主均只停止指定成员子树，保留原生接收者与停止失败。 */
-export declare function drainMemberChildren(runtime: Context['subagents'], parent: Agent, childIds: readonly SessionId[]): Promise<void>;
-/** 只包装真实存在的接口，避免把缺失的旧方法伪装成可调用方法。 */
-export declare function guardSubagentCreation(ctx: Context, check: (parent: Agent) => void): void;
 /** Package identity a released plugin-wrapper source names on older hosts. */
 export declare const AGENT_TEAMS_PLUGIN_NAME = "@nanmicoder/dsh-agent-teams";
 /**
@@ -59,8 +73,33 @@ export type AgentTeamsSource = {
     readonly goal?: string;
     readonly profile?: string;
 };
-/** Stored session format generation of the running host; 0 when it exposes none. */
-export declare function hostSessionFormatVersion(): number;
+/** Anything that exposes the stored format generation on its live session header. */
+export interface SessionFormatBearer {
+    readonly session?: {
+        readonly header?: {
+            readonly version?: unknown;
+        };
+    } | undefined;
+}
+/**
+ * Stored format generation observed on a live session, when the host exposes it.
+ *
+ * The module constant is only a fallback: a plugin can resolve a *nested*
+ * `@deepseek-ai/dsh-session` copy that belongs to a different host generation
+ * than the process loading it (a profile whose lockfile pins the DSH package
+ * line, a Desktop shell with an embedded core, a duplicated store). That copy
+ * then reports the wrong generation — 0 on a v4 host — which selects the
+ * retired `plugin` wrapper and makes every durable AgentTeams message fail the
+ * host's own admission check (#236). The live session header belongs to the
+ * host that persists the message, so it outranks the resolved module.
+ */
+export declare function observedSessionFormatVersion(subject?: SessionFormatBearer): number | undefined;
+/**
+ * Stored session format generation of the running host; 0 when neither the live
+ * session nor the resolved module exposes one.
+ * @param observed - a live session observation; preferred over the module constant.
+ */
+export declare function hostSessionFormatVersion(observed?: number): number;
 /**
  * Source for one AgentTeams-authored message on the running host.
  *
@@ -73,9 +112,13 @@ export declare function hostSessionFormatVersion(): number;
  * the released plugin wrapper is used instead; the goal and profile already
  * travel in the message text.
  * @param modern - the producer-owned source to use where the host admits it.
+ * @param observed - the live session's stored format generation, when callers
+ * have the owning agent at hand. Never trust the resolved module alone: on a
+ * host whose profile pins another DSH line it reports a retired generation and
+ * the v4 writer rejects the wrapper (#236).
  * @returns a source accepted by the running host and by its migration chain.
  */
-export declare function agentTeamsSource(modern: AgentTeamsSource): MessageSource;
+export declare function agentTeamsSource(modern: AgentTeamsSource, observed?: number): MessageSource;
 /**
  * 0.1.6 moved startup admission to serial agent/created. Older created events
  * have no source and precede session-start; ignore those until the old hook.
@@ -84,6 +127,8 @@ export declare function agentTeamsSource(modern: AgentTeamsSource): MessageSourc
 export declare function onAgentReady(ctx: Context, listener: (agent: Agent, vetoable: boolean) => void): () => void;
 /** Read child-owned history, excluding any descriptor inherited from a parent. */
 export declare function sessionOwnEvents(session: Session): readonly SessionEvent[];
+/** Legacy hosts log each chunk separately; current hosts embed the committed stream. */
+export declare function outputLimitTurn(event: SessionEvent): number | undefined;
 /** 读取宿主冻结的会话策略，旧版没有投影服务时检查本会话日志。 */
 export declare function assertMemberModelSelection(ctx: Context, captain: Agent, route: {
     provider: string;
@@ -147,4 +192,6 @@ export declare function memberToolFilter(maxDepth: number | undefined, knownTool
  * @returns the started member.
  */
 export declare function startMemberWithLenientFilter<T>(start: (filter: MemberToolFilter) => Promise<T>, filter: MemberToolFilter, relaxableDeny?: readonly string[]): Promise<T>;
+/** Targeted recursive cancellation renamed with the unified activation manager. */
+export declare function drainMemberChildren(runtime: Context['subagents'], parent: Agent, ids: readonly SessionId[]): Promise<void>;
 export {};
